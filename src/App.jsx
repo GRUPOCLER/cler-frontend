@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import * as api from './api.js'
+import Etiquetas from './Etiquetas.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 function useToast() {
@@ -221,22 +222,140 @@ function NuevaEntrega({ toast, irDetalle }) {
   )
 }
 
-// ── DETALLE DE ENTREGA ───────────────────────────────────
-function Detalle({ id, volver, toast }) {
-  const [ent, setEnt] = useState(null)
+// ── MODAL GENERICO ────────────────────────────────────────
+function Modal({ titulo, sub, onClose, children, footer }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-titulo">{titulo}</div>
+            {sub && <div className="modal-sub">{sub}</div>}
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-foot">{footer}</div>}
+      </div>
+    </div>
+  )
+}
 
-  const cargar = () => api.detalleEntrega(id).then(setEnt).catch(e => toast(e.message, 'error'))
-  useEffect(() => { cargar() }, [id])
+// ── MODAL: NUEVA TARIMA (peso opcional) ──────────────────
+function ModalNuevaTarima({ seleccionados, onClose, onConfirmar }) {
+  const [peso, setPeso] = useState('')
+  return (
+    <Modal titulo="Nueva tarima" sub={`${seleccionados.length} producto(s) seleccionado(s)`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar(parseFloat(peso) || 0)}>Crear tarima</button>
+      </>}>
+      <label className="dim-label">Peso del palet en kg (opcional)</label>
+      <input className="inp" type="number" min="0" step="0.1" placeholder="0"
+        value={peso} onChange={e => setPeso(e.target.value)} autoFocus />
+    </Modal>
+  )
+}
+
+// ── MODAL: CERRAR TARIMA (dimensiones opcionales) ────────
+function ModalCerrarTarima({ onClose, onConfirmar }) {
+  const [largo, setLargo] = useState('')
+  const [ancho, setAncho] = useState('')
+  const [alto, setAlto] = useState('')
+  return (
+    <Modal titulo="Cerrar tarima" sub="Dimensiones fisicas opcionales" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar({
+          largo_cm: parseFloat(largo) || 0, ancho_cm: parseFloat(ancho) || 0, alto_cm: parseFloat(alto) || 0
+        })}>Cerrar tarima</button>
+      </>}>
+      <div className="dim-grid">
+        <div><label className="dim-label">Largo (cm)</label>
+          <input className="inp" type="number" min="0" step="0.5" placeholder="0" value={largo} onChange={e => setLargo(e.target.value)} /></div>
+        <div><label className="dim-label">Ancho (cm)</label>
+          <input className="inp" type="number" min="0" step="0.5" placeholder="0" value={ancho} onChange={e => setAncho(e.target.value)} /></div>
+        <div><label className="dim-label">Alto (cm)</label>
+          <input className="inp" type="number" min="0" step="0.5" placeholder="0" value={alto} onChange={e => setAlto(e.target.value)} /></div>
+      </div>
+    </Modal>
+  )
+}
+
+// ── DETALLE DE ENTREGA ───────────────────────────────────
+function Detalle({ id, volver, toast, verEtiquetas }) {
+  const [ent, setEnt] = useState(null)
+  const [sel, setSel] = useState(new Set())
+  const [modalNueva, setModalNueva] = useState(false)
+  const [modalCerrar, setModalCerrar] = useState(null) // id_tarima o null
+  const [abiertas, setAbiertas] = useState(new Set())
+
+  const cargar = () => api.detalleEntrega(id).then(d => {
+    setEnt(d)
+    setAbiertas(new Set((d.tarimas || []).map(t => t.id_tarima)))
+  }).catch(e => toast(e.message, 'error'))
+
+  useEffect(() => { cargar(); setSel(new Set()) }, [id])
+
+  if (!ent) return <div className="cargando">Cargando entrega...</div>
+
+  const productos = ent.productos || []
+  const tarimas   = ent.tarimas || []
+  const sueltos   = productos.filter(p => !p.id_tarima)
+  const usaTarimas = ent.sistema === 'TAR' || ent.sistema === 'MIX'
+  const usaSueltos = ent.sistema === 'CS'  || ent.sistema === 'MIX'
+
+  const toggleSel = (idProd) => {
+    const n = new Set(sel)
+    n.has(idProd) ? n.delete(idProd) : n.add(idProd)
+    setSel(n)
+  }
 
   const completar = async () => {
+    try { await api.completarEntrega(id); toast('Entrega completada', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const crearTarimaConSel = async (pesoPaletKg) => {
     try {
-      await api.completarEntrega(id)
-      toast('Entrega marcada como completada', 'ok')
+      await api.crearTarima(id, [...sel], pesoPaletKg)
+      toast('Tarima creada', 'ok')
+      setSel(new Set()); setModalNueva(false); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const quitarDeTarima = async (idProd) => {
+    try {
+      await api.asignarProductoATarima(id, idProd, null)
+      toast('Producto devuelto a sueltos', 'ok')
       cargar()
     } catch (e) { toast(e.message, 'error') }
   }
 
-  if (!ent) return <div className="cargando">Cargando entrega...</div>
+  const eliminarTarima = async (idTarima) => {
+    if (!confirm('¿Eliminar esta tarima? Los productos vuelven a sueltos.')) return
+    try { await api.eliminarTarima(id, idTarima); toast('Tarima eliminada', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const cerrarConDims = async (dims) => {
+    try {
+      await api.cerrarTarima(id, modalCerrar, dims)
+      toast('Tarima cerrada', 'ok')
+      setModalCerrar(null); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const reabrir = async (idTarima) => {
+    try { await api.reabrirTarima(id, idTarima); toast('Tarima reabierta', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const toggleAbierta = (idTarima) => {
+    const n = new Set(abiertas)
+    n.has(idTarima) ? n.delete(idTarima) : n.add(idTarima)
+    setAbiertas(n)
+  }
 
   return (
     <div className="contenedor">
@@ -245,7 +364,7 @@ function Detalle({ id, volver, toast }) {
           <div className="detalle-folio">{ent.num_entrega}</div>
           <div className="detalle-cliente">{ent.nombre_cliente}</div>
           {ent.direccion && <div className="detalle-dir">{ent.direccion}</div>}
-          <div style={{marginTop:8,display:'flex',gap:8}}>
+          <div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
             <span className={'badge-sistema badge-' + ent.sistema}>{ent.sistema}</span>
             <span className={'badge-estatus badge-' + ent.estatus}>{ent.estatus}</span>
             {ent.orden && <span className="chip chip-warn">{ent.orden}</span>}
@@ -253,24 +372,148 @@ function Detalle({ id, volver, toast }) {
         </div>
         <div className="acciones">
           <button className="btn-sec" onClick={volver}>Volver</button>
+          {tarimas.some(t => t.estatus === 'cerrada') &&
+            <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas</button>}
           {ent.estatus === 'pendiente' &&
             <button className="btn-principal" onClick={completar}>Completar entrega</button>}
         </div>
       </div>
 
-      <div className="panel">
-        <div className="panel-titulo">
-          Productos
-          <span className="chip chip-ok">{(ent.productos || []).length}</span>
+      <div className={usaTarimas ? 'split-cols' : ''}>
+        <div>
+          {usaSueltos && (
+            <div className="panel">
+              <div className="panel-titulo">
+                {usaTarimas ? 'Productos sueltos (carga suelta)' : 'Productos'}
+                <span className="chip chip-ok">{sueltos.length}</span>
+              </div>
+              {sueltos.length === 0
+                ? <div className="vacio">Sin productos sueltos pendientes.</div>
+                : sueltos.map(p => (
+                  <div key={p.id_producto} className="fila-prod-check" onClick={() => usaTarimas && toggleSel(p.id_producto)}>
+                    {usaTarimas && <input type="checkbox" checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} onClick={e => e.stopPropagation()} />}
+                    <span className="fp-clave">{p.clave}</span>
+                    <span className="fp-desc">{p.descripcion}</span>
+                    <span className="fp-cant">x{p.cantidad_total}</span>
+                  </div>
+                ))}
+              {usaTarimas && sel.size > 0 && (
+                <div style={{marginTop:12}}>
+                  <button className="btn-principal" onClick={() => setModalNueva(true)}>
+                    Formar tarima con {sel.size} producto(s)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!usaSueltos && (
+            <div className="panel">
+              <div className="panel-titulo">Productos para tarimas<span className="chip chip-ok">{productos.length}</span></div>
+              {productos.map(p => (
+                <div key={p.id_producto} className={'fila-prod-check' + (p.id_tarima ? ' en-tarima' : '')} onClick={() => !p.id_tarima && toggleSel(p.id_producto)}>
+                  <input type="checkbox" disabled={!!p.id_tarima} checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} onClick={e => e.stopPropagation()} />
+                  <span className="fp-clave">{p.clave}</span>
+                  <span className="fp-desc">{p.descripcion}</span>
+                  <span className="fp-cant">x{p.cantidad_total}</span>
+                  {p.id_tarima && <span className="chip-tarima-tag">T{tarimas.find(t => t.id_tarima === p.id_tarima)?.numero_tarima}</span>}
+                </div>
+              ))}
+              {sel.size > 0 && (
+                <div style={{marginTop:12}}>
+                  <button className="btn-principal" onClick={() => setModalNueva(true)}>
+                    Formar tarima con {sel.size} producto(s)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        {(ent.productos || []).map(p => (
-          <div key={p.id_producto} className="fila-prod">
-            <span className="prod-clave">{p.clave}</span>
-            <span className="prod-desc">{p.descripcion}</span>
-            <span className="prod-cant">x{p.cantidad_total}</span>
+
+        {usaTarimas && (
+          <div className="panel">
+            <div className="panel-titulo">Tarimas<span className="chip chip-ok">{tarimas.length}</span></div>
+            {tarimas.length === 0
+              ? <div className="tarima-vacia">Sin tarimas. Selecciona productos y forma la primera.</div>
+              : tarimas.map(t => {
+                const prods = productos.filter(p => p.id_tarima === t.id_tarima)
+                const abierta = abiertas.has(t.id_tarima)
+                const cerrada = t.estatus === 'cerrada'
+                return (
+                  <div key={t.id_tarima} className={'tarima-card' + (cerrada ? ' cerrada' : '')}>
+                    <div className="tarima-head" onClick={() => toggleAbierta(t.id_tarima)}>
+                      <span className="tarima-num">Tarima {t.numero_tarima}</span>
+                      <span className="tarima-count">{prods.length} prod.</span>
+                      <span className={'chip ' + (cerrada ? 'chip-ok' : 'chip-warn')}>{cerrada ? 'cerrada' : 'abierta'}</span>
+                    </div>
+                    {(t.largo_cm > 0 && t.ancho_cm > 0 && t.alto_cm > 0) &&
+                      <div className="tarima-dims-tag">{t.largo_cm}×{t.ancho_cm}×{t.alto_cm} cm</div>}
+                    {abierta && (
+                      <div className="tarima-body">
+                        {prods.length === 0
+                          ? <div className="tarima-vacia">Sin productos</div>
+                          : prods.map(p => (
+                            <div key={p.id_producto} className="tarima-prod-row">
+                              <span className="tp-clave">{p.clave}</span>
+                              <span className="tp-desc">{p.descripcion}</span>
+                              <span className="tp-cant">x{p.cantidad_total}</span>
+                              {!cerrada && <button className="btn-quitar-mini" onClick={() => quitarDeTarima(p.id_producto)}>Quitar</button>}
+                            </div>
+                          ))}
+                        <div className="tarima-acciones">
+                          {cerrada ? (
+                            <>
+                              <button className="btn-mini" onClick={() => verEtiquetas(id, t.id_tarima)}>Ver etiqueta</button>
+                              <button className="btn-mini" onClick={() => reabrir(t.id_tarima)}>Reabrir</button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="btn-mini btn-mini-exito" onClick={() => setModalCerrar(t.id_tarima)}>Cerrar tarima</button>
+                              <button className="btn-mini" onClick={() => eliminarTarima(t.id_tarima)}>Eliminar</button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
           </div>
-        ))}
+        )}
       </div>
+
+      {modalNueva && (
+        <ModalNuevaTarima seleccionados={[...sel]} onClose={() => setModalNueva(false)} onConfirmar={crearTarimaConSel} />
+      )}
+      {modalCerrar && (
+        <ModalCerrarTarima onClose={() => setModalCerrar(null)} onConfirmar={cerrarConDims} />
+      )}
+    </div>
+  )
+}
+
+// ── VISTA DE ETIQUETAS (imprimible) ──────────────────────
+function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
+  const [datos, setDatos] = useState(null)
+
+  useEffect(() => {
+    const carga = idTarima
+      ? api.obtenerEtiqueta(idEntrega, idTarima).then(d => [d])
+      : api.obtenerTodasEtiquetas(idEntrega)
+    carga.then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+  }, [idEntrega, idTarima])
+
+  if (!datos) return <div className="cargando">Generando etiqueta(s)...</div>
+
+  return (
+    <div>
+      <div className="contenedor" style={{marginBottom: 12}}>
+        <div className="acciones" style={{marginLeft: 0}}>
+          <button className="btn-sec" onClick={volver}>Volver</button>
+          <button className="btn-principal" onClick={() => window.print()}>Imprimir</button>
+        </div>
+      </div>
+      <Etiquetas datos={datos} />
     </div>
   )
 }
@@ -280,35 +523,44 @@ export default function App() {
   const [logueado, setLogueado] = useState(!!api.getToken())
   const [vista, setVista] = useState('dashboard')
   const [idDetalle, setIdDetalle] = useState(null)
+  const [etiquetaTarima, setEtiquetaTarima] = useState(null)
   const [toast, Toast] = useToast()
 
   if (!logueado) return <Login onOk={() => setLogueado(true)} />
 
   const user = api.getUser()
   const irDetalle = (id) => { setIdDetalle(id); setVista('detalle') }
+  const verEtiquetas = (idEnt, idTar = null) => {
+    setIdDetalle(idEnt); setEtiquetaTarima(idTar); setVista('etiquetas')
+  }
 
   return (
     <div className="shell">
-      <div className="topbar">
-        <div className="topbar-marca">GRUPO<span>CLER</span></div>
-        <nav className="topbar-nav">
-          <button className={'nav-btn' + (vista === 'dashboard' ? ' activo' : '')}
-            onClick={() => setVista('dashboard')}>Pulso</button>
-          <button className={'nav-btn' + (vista === 'nueva' ? ' activo' : '')}
-            onClick={() => setVista('nueva')}>Nueva entrega</button>
-        </nav>
-        <div className="topbar-user">
-          <span>{user?.nombre || user?.usuario}</span>
-          <button className="btn-salir" onClick={() => { api.logout(); setLogueado(false) }}>
-            Salir
-          </button>
+      {vista !== 'etiquetas' && (
+        <div className="topbar">
+          <div className="topbar-marca">GRUPO<span>CLER</span></div>
+          <nav className="topbar-nav">
+            <button className={'nav-btn' + (vista === 'dashboard' ? ' activo' : '')}
+              onClick={() => setVista('dashboard')}>Pulso</button>
+            <button className={'nav-btn' + (vista === 'nueva' ? ' activo' : '')}
+              onClick={() => setVista('nueva')}>Nueva entrega</button>
+          </nav>
+          <div className="topbar-user">
+            <span>{user?.nombre || user?.usuario}</span>
+            <button className="btn-salir" onClick={() => { api.logout(); setLogueado(false) }}>
+              Salir
+            </button>
+          </div>
         </div>
-      </div>
+      )}
       <div className="contenido">
         {vista === 'dashboard' && <Dashboard irDetalle={irDetalle} />}
         {vista === 'nueva'     && <NuevaEntrega toast={toast} irDetalle={irDetalle} />}
         {vista === 'detalle'   && idDetalle &&
-          <Detalle id={idDetalle} volver={() => setVista('dashboard')} toast={toast} />}
+          <Detalle id={idDetalle} volver={() => setVista('dashboard')} toast={toast} verEtiquetas={verEtiquetas} />}
+        {vista === 'etiquetas' && idDetalle &&
+          <VistaEtiquetas idEntrega={idDetalle} idTarima={etiquetaTarima}
+            volver={() => setVista('detalle')} toast={toast} />}
       </div>
       <Toast />
     </div>
