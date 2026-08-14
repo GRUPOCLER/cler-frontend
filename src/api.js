@@ -47,6 +47,47 @@ export const crearEntrega     = (body)        => req('/api/entregas/', { method:
 export const completarEntrega = (id)          => req('/api/entregas/' + id + '/completar', { method: 'POST' })
 export const getDashboard     = ()            => req('/api/dashboard/')
 
+// ── TARIMAS ───────────────────────────────────────────────
+export const crearTarima = (idEntrega, idProductos = [], pesoPaletKg = 0) =>
+  req(`/api/entregas/${idEntrega}/tarimas`, {
+    method: 'POST',
+    body: JSON.stringify({ id_productos: idProductos, peso_palet_kg: pesoPaletKg })
+  })
+
+export const asignarProductoATarima = (idEntrega, idProducto, idTarima) =>
+  req(`/api/entregas/${idEntrega}/productos/${idProducto}/tarima`, {
+    method: 'PATCH',
+    body: JSON.stringify({ id_tarima: idTarima })
+  })
+
+export const eliminarTarima = (idEntrega, idTarima) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}`, { method: 'DELETE' })
+
+export const cerrarTarima = (idEntrega, idTarima, dims = {}) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/cerrar`, {
+    method: 'POST',
+    body: JSON.stringify({
+      largo_cm: dims.largo_cm || 0,
+      ancho_cm: dims.ancho_cm || 0,
+      alto_cm:  dims.alto_cm  || 0
+    })
+  })
+
+export const reabrirTarima = (idEntrega, idTarima) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/reabrir`, { method: 'POST' })
+
+export const actualizarDimensiones = (idEntrega, idTarima, dims) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/dimensiones`, {
+    method: 'PATCH',
+    body: JSON.stringify(dims)
+  })
+
+export const obtenerEtiqueta = (idEntrega, idTarima) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/etiqueta`)
+
+export const obtenerTodasEtiquetas = (idEntrega) =>
+  req(`/api/entregas/${idEntrega}/etiquetas`)
+
 export async function subirPDF(archivo, sistema, comercializador) {
   const fd = new FormData()
   fd.append('archivo', archivo)
@@ -65,7 +106,6 @@ export async function subirPDF(archivo, sistema, comercializador) {
 
 // ── ODOO (via backend, sin CORS) ─────────────────────────
 export async function odooSesion() {
-  // El backend ya resuelve la conexion; siempre "activa" desde la perspectiva del frontend
   return { activa: true, usuario: 'Sistema' }
 }
 
