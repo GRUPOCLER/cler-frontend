@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import * as api from './api.js'
 import Etiquetas from './Etiquetas.jsx'
 import EtiquetasSueltas from './EtiquetasSueltas.jsx'
+import ListaEmpaque from './ListaEmpaque.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 function useToast() {
@@ -396,8 +397,56 @@ function ModalCliente({ nombre, direccion, onClose, onConfirmar }) {
   )
 }
 
+// ── MODAL: FUSIONAR ENTREGAS ──────────────────────────────
+function ModalFusion({ onClose, onConfirmar }) {
+  const [grupos, setGrupos] = useState(null)
+  const [selEnt, setSelEnt] = useState(new Set())
+  const [clienteActivo, setClienteActivo] = useState(null)
+
+  useEffect(() => {
+    api.candidatasFusion().then(setGrupos).catch(() => setGrupos([]))
+  }, [])
+
+  const toggle = (idEntrega, cliente) => {
+    if (clienteActivo && clienteActivo !== cliente && selEnt.size === 0) setClienteActivo(cliente)
+    if (clienteActivo && clienteActivo !== cliente) return // solo un cliente a la vez
+    const n = new Set(selEnt)
+    if (n.has(idEntrega)) { n.delete(idEntrega); if (n.size === 0) setClienteActivo(null) }
+    else { n.add(idEntrega); setClienteActivo(cliente) }
+    setSelEnt(n)
+  }
+
+  return (
+    <Modal titulo="Fusionar entregas" sub="Selecciona 2+ entregas del mismo cliente" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" disabled={selEnt.size < 2} onClick={() => onConfirmar([...selEnt])}>
+          Entarimar juntas
+        </button>
+      </>}>
+      {!grupos ? <div className="cargando">Cargando...</div>
+        : grupos.length === 0 ? <div className="vacio">No hay clientes con 2+ entregas pendientes.</div>
+        : grupos.map(g => (
+          <div key={g.cliente} className="fusion-grupo">
+            <div className="fusion-cliente">{g.cliente}</div>
+            {g.entregas.map(e => (
+              <label key={e.id_entrega} className="fusion-fila"
+                style={{ opacity: clienteActivo && clienteActivo !== g.cliente ? 0.4 : 1 }}>
+                <input type="checkbox" checked={selEnt.has(e.id_entrega)}
+                  disabled={clienteActivo && clienteActivo !== g.cliente}
+                  onChange={() => toggle(e.id_entrega, g.cliente)} />
+                <span className="ff-folio">{e.num_entrega}</span>
+                <span className="ff-ov">{e.orden ? 'OV ' + e.orden : ''}</span>
+              </label>
+            ))}
+          </div>
+        ))}
+    </Modal>
+  )
+}
+
 // ── DETALLE DE ENTREGA ───────────────────────────────────
-function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
+function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const [ent, setEnt] = useState(null)
   const [sel, setSel] = useState(new Set())
   const [modalNueva, setModalNueva] = useState(false)
@@ -408,10 +457,37 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
   const [modalCliente, setModalCliente] = useState(false)
   const [abiertas, setAbiertas] = useState(new Set())
 
-  const cargar = () => api.detalleEntrega(id).then(d => {
-    setEnt(d)
-    setAbiertas(prev => new Set([...prev, ...(d.tarimas || []).map(t => t.id_tarima)]))
-  }).catch(e => toast(e.message, 'error'))
+  const cargar = async () => {
+    try {
+      const d = await api.detalleEntrega(id)
+      const idsFusion = new Set()
+      ;(d.tarimas || []).forEach(t => {
+        if (t.ids_entregas_fusionadas) t.ids_entregas_fusionadas.split(',').forEach(x => idsFusion.add(x))
+      })
+      idsFusion.delete(id)
+
+      if (idsFusion.size > 0) {
+        const f = await api.fusionDetalle([id, ...idsFusion])
+        const folios = f.entregas.map(e => e.num_entrega).filter(Boolean).join(' + ')
+        const ovs    = f.entregas.map(e => e.orden).filter(Boolean).join(' + ')
+        const combinado = {
+          ...d,
+          es_fusion:          true,
+          idsFusionActivos:   [id, ...idsFusion],
+          num_entrega:        folios,
+          orden:              ovs,
+          nombre_cliente:     f.cliente,
+          productos:          f.productos,
+          tarimas:            f.tarimas,
+        }
+        setEnt(combinado)
+        setAbiertas(prev => new Set([...prev, ...(f.tarimas || []).map(t => t.id_tarima)]))
+      } else {
+        setEnt(d)
+        setAbiertas(prev => new Set([...prev, ...(d.tarimas || []).map(t => t.id_tarima)]))
+      }
+    } catch (e) { toast(e.message, 'error') }
+  }
 
   useEffect(() => { cargar(); setSel(new Set()) }, [id])
 
@@ -436,7 +512,7 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
 
   const crearTarimaVacia = async (pesoPaletKg) => {
     try {
-      await api.crearTarima(id, pesoPaletKg)
+      await api.crearTarima(id, pesoPaletKg, ent.idsFusionActivos || null)
       toast('Tarima creada', 'ok')
       setModalNueva(false); cargar()
     } catch (e) { toast(e.message, 'error') }
@@ -540,8 +616,12 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
           <button className="btn-sec" onClick={volver}>Volver</button>
           {productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX') &&
             <button className="btn-sec" onClick={() => verEtiquetasSueltas(id)}>Imprimir etiquetas sueltas</button>}
-          {tarimas.some(t => t.estatus === 'cerrada') &&
-            <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas de tarima</button>}
+          {tarimas.some(t => t.estatus === 'cerrada') && (
+            <>
+              <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas de tarima</button>
+              <button className="btn-sec" onClick={() => verPacking(id)}>Lista de empaque</button>
+            </>
+          )}
           {ent.estatus === 'pendiente' &&
             <button className="btn-principal" onClick={completar}>Completar entrega</button>}
         </div>
@@ -725,12 +805,36 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
   )
 }
 
+// ── VISTA DE LISTA DE EMPAQUE (imprimible) ────────────────
+function VistaPacking({ idEntrega, volver, toast }) {
+  const [datos, setDatos] = useState(null)
+
+  useEffect(() => {
+    api.obtenerPacking(idEntrega).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+  }, [idEntrega])
+
+  if (!datos) return <div className="cargando">Generando lista de empaque...</div>
+
+  return (
+    <div>
+      <div className="contenedor" style={{marginBottom: 12}}>
+        <div className="acciones" style={{marginLeft: 0}}>
+          <button className="btn-sec" onClick={volver}>Volver</button>
+          <button className="btn-principal" onClick={() => window.print()}>Imprimir</button>
+        </div>
+      </div>
+      <ListaEmpaque datos={datos} />
+    </div>
+  )
+}
+
 // ── APP ──────────────────────────────────────────────────
 export default function App() {
   const [logueado, setLogueado] = useState(!!api.getToken())
   const [vista, setVista] = useState('dashboard')
   const [idDetalle, setIdDetalle] = useState(null)
   const [etiquetaTarima, setEtiquetaTarima] = useState(null)
+  const [modalFusion, setModalFusion] = useState(false)
   const [toast, Toast] = useToast()
 
   if (!logueado) return <Login onOk={() => setLogueado(true)} />
@@ -743,8 +847,20 @@ export default function App() {
   const verEtiquetasSueltas = (idEnt) => {
     setIdDetalle(idEnt); setVista('etiquetas-sueltas')
   }
+  const verPacking = (idEnt) => {
+    setIdDetalle(idEnt); setVista('packing')
+  }
+  const confirmarFusion = async (idsSeleccionados) => {
+    try {
+      const idPrimaria = idsSeleccionados[0]
+      await api.crearTarima(idPrimaria, 0, idsSeleccionados)
+      toast('Tarima fusionada creada', 'ok')
+      setModalFusion(false)
+      irDetalle(idPrimaria)
+    } catch (e) { toast(e.message, 'error') }
+  }
 
-  const enVistaEtiqueta = vista === 'etiquetas' || vista === 'etiquetas-sueltas'
+  const enVistaEtiqueta = vista === 'etiquetas' || vista === 'etiquetas-sueltas' || vista === 'packing'
 
   return (
     <div className="shell">
@@ -756,6 +872,7 @@ export default function App() {
               onClick={() => setVista('dashboard')}>Pulso</button>
             <button className={'nav-btn' + (vista === 'nueva' ? ' activo' : '')}
               onClick={() => setVista('nueva')}>Nueva entrega</button>
+            <button className="nav-btn" onClick={() => setModalFusion(true)}>Fusionar entregas</button>
           </nav>
           <div className="topbar-user">
             <span>{user?.nombre || user?.usuario}</span>
@@ -770,14 +887,20 @@ export default function App() {
         {vista === 'nueva'     && <NuevaEntrega toast={toast} irDetalle={irDetalle} />}
         {vista === 'detalle'   && idDetalle &&
           <Detalle id={idDetalle} volver={() => setVista('dashboard')} toast={toast}
-            verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} />}
+            verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} verPacking={verPacking} />}
         {vista === 'etiquetas' && idDetalle &&
           <VistaEtiquetas idEntrega={idDetalle} idTarima={etiquetaTarima}
             volver={() => setVista('detalle')} toast={toast} />}
         {vista === 'etiquetas-sueltas' && idDetalle &&
           <VistaEtiquetasSueltas idEntrega={idDetalle}
             volver={() => setVista('detalle')} toast={toast} />}
+        {vista === 'packing' && idDetalle &&
+          <VistaPacking idEntrega={idDetalle}
+            volver={() => setVista('detalle')} toast={toast} />}
       </div>
+      {modalFusion && (
+        <ModalFusion onClose={() => setModalFusion(false)} onConfirmar={confirmarFusion} />
+      )}
       <Toast />
     </div>
   )
