@@ -464,8 +464,8 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
         </div>
         <div className="acciones">
           <button className="btn-sec" onClick={volver}>Volver</button>
-          {productos.length > 0 && (ent.sistema === 'CS' || ent.sistema === 'MIX') &&
-            <button className="btn-sec" onClick={() => verEtiquetasSueltas(id)}>Imprimir etiquetas</button>}
+          {productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX') &&
+            <button className="btn-sec" onClick={() => verEtiquetasSueltas(id)}>Imprimir etiquetas sueltas</button>}
           {tarimas.some(t => t.estatus === 'cerrada') &&
             <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas de tarima</button>}
           {ent.estatus === 'pendiente' &&
