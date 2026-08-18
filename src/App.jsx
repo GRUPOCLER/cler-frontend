@@ -242,10 +242,10 @@ function Modal({ titulo, sub, onClose, children, footer }) {
 }
 
 // ── MODAL: NUEVA TARIMA (peso opcional) ──────────────────
-function ModalNuevaTarima({ seleccionados, onClose, onConfirmar }) {
+function ModalNuevaTarima({ onClose, onConfirmar }) {
   const [peso, setPeso] = useState('')
   return (
-    <Modal titulo="Nueva tarima" sub={`${seleccionados.length} producto(s) seleccionado(s)`} onClose={onClose}
+    <Modal titulo="Nueva tarima" sub="Se crea vacia; despues le asignas productos" onClose={onClose}
       footer={<>
         <button className="btn-sec" onClick={onClose}>Cancelar</button>
         <button className="btn-principal" onClick={() => onConfirmar(parseFloat(peso) || 0)}>Crear tarima</button>
@@ -253,6 +253,54 @@ function ModalNuevaTarima({ seleccionados, onClose, onConfirmar }) {
       <label className="dim-label">Peso del palet en kg (opcional)</label>
       <input className="inp" type="number" min="0" step="0.1" placeholder="0"
         value={peso} onChange={e => setPeso(e.target.value)} autoFocus />
+    </Modal>
+  )
+}
+
+// ── MODAL: ASIGNAR PRODUCTOS A TARIMA (cantidad por SKU) ──
+function ModalAsignar({ tarimasAbiertas, productos, idTarimaPre, onClose, onConfirmar }) {
+  const [idTarima, setIdTarima] = useState(idTarimaPre || (tarimasAbiertas[0]?.id_tarima ?? ''))
+  const [cants, setCants] = useState(() => {
+    const init = {}
+    productos.forEach(p => { init[p.id_producto] = p.cantidad_pendiente })
+    return init
+  })
+
+  const confirmar = () => {
+    const asignaciones = productos
+      .map(p => ({ id_producto: p.id_producto, cantidad: parseInt(cants[p.id_producto]) || 0 }))
+      .filter(a => a.cantidad > 0)
+    if (!idTarima) return
+    if (!asignaciones.length) return
+    onConfirmar(idTarima, asignaciones)
+  }
+
+  return (
+    <Modal titulo="Asignar a tarima" sub={`${productos.length} producto(s) seleccionado(s)`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={confirmar}>Confirmar</button>
+      </>}>
+      <label className="dim-label">Tarima destino</label>
+      <select className="inp" style={{marginBottom: 14}} value={idTarima} onChange={e => setIdTarima(e.target.value)}>
+        {tarimasAbiertas.map(t => (
+          <option key={t.id_tarima} value={t.id_tarima}>Tarima {t.numero_tarima}</option>
+        ))}
+      </select>
+      <label className="dim-label">Cantidad por producto</label>
+      {productos.map(p => (
+        <div key={p.id_producto} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--amarillo)'}}>{p.clave}</div>
+            <div style={{fontSize:12,color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</div>
+            <div style={{fontSize:10,color:'var(--text3)'}}>Disponible: {p.cantidad_pendiente}</div>
+          </div>
+          <input type="number" min="1" max={p.cantidad_pendiente}
+            className="inp" style={{width:70,textAlign:'right',padding:'7px 8px'}}
+            value={cants[p.id_producto]}
+            onChange={e => setCants({ ...cants, [p.id_producto]: e.target.value })} />
+        </div>
+      ))}
     </Modal>
   )
 }
@@ -282,17 +330,37 @@ function ModalCerrarTarima({ onClose, onConfirmar }) {
   )
 }
 
+// ── MODAL: EXTENSION DE SKU ────────────────────────────────
+function ModalExtension({ producto, onClose, onConfirmar }) {
+  return (
+    <Modal titulo="Extension de SKU" sub={`Clave: ${producto.clave}`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar(producto.cantidad_total)}>
+          Crear extension ({producto.cantidad_total})
+        </button>
+      </>}>
+      <p style={{fontSize:12,color:'var(--text3)',marginBottom:14,lineHeight:1.5}}>
+        Para productos con 2+ empaques fisicos separados. Se creara una extension
+        con la misma cantidad que el SKU original ({producto.cantidad_total}).
+      </p>
+    </Modal>
+  )
+}
+
 // ── DETALLE DE ENTREGA ───────────────────────────────────
 function Detalle({ id, volver, toast, verEtiquetas }) {
   const [ent, setEnt] = useState(null)
   const [sel, setSel] = useState(new Set())
   const [modalNueva, setModalNueva] = useState(false)
-  const [modalCerrar, setModalCerrar] = useState(null) // id_tarima o null
+  const [modalAsignarPre, setModalAsignarPre] = useState(undefined) // undefined=cerrado, null|id_tarima=abierto
+  const [modalCerrar, setModalCerrar] = useState(null)
+  const [modalExt, setModalExt] = useState(null)
   const [abiertas, setAbiertas] = useState(new Set())
 
   const cargar = () => api.detalleEntrega(id).then(d => {
     setEnt(d)
-    setAbiertas(new Set((d.tarimas || []).map(t => t.id_tarima)))
+    setAbiertas(prev => new Set([...prev, ...(d.tarimas || []).map(t => t.id_tarima)]))
   }).catch(e => toast(e.message, 'error'))
 
   useEffect(() => { cargar(); setSel(new Set()) }, [id])
@@ -300,10 +368,10 @@ function Detalle({ id, volver, toast, verEtiquetas }) {
   if (!ent) return <div className="cargando">Cargando entrega...</div>
 
   const productos = ent.productos || []
-  const tarimas   = ent.tarimas || []
-  const sueltos   = productos.filter(p => !p.id_tarima)
+  const tarimas    = ent.tarimas || []
+  const abiertasT  = tarimas.filter(t => t.estatus === 'abierta')
+  const pendientes = productos.filter(p => p.cantidad_pendiente > 0)
   const usaTarimas = ent.sistema === 'TAR' || ent.sistema === 'MIX'
-  const usaSueltos = ent.sistema === 'CS'  || ent.sistema === 'MIX'
 
   const toggleSel = (idProd) => {
     const n = new Set(sel)
@@ -316,24 +384,37 @@ function Detalle({ id, volver, toast, verEtiquetas }) {
     catch (e) { toast(e.message, 'error') }
   }
 
-  const crearTarimaConSel = async (pesoPaletKg) => {
+  const crearTarimaVacia = async (pesoPaletKg) => {
     try {
-      await api.crearTarima(id, [...sel], pesoPaletKg)
+      await api.crearTarima(id, pesoPaletKg)
       toast('Tarima creada', 'ok')
-      setSel(new Set()); setModalNueva(false); cargar()
+      setModalNueva(false); cargar()
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const quitarDeTarima = async (idProd) => {
+  const abrirAsignar = (idTarimaPre) => {
+    if (abiertasT.length === 0) { toast('Crea una tarima abierta primero', 'error'); return }
+    if (sel.size === 0) { toast('Selecciona productos pendientes', 'error'); return }
+    setModalAsignarPre(idTarimaPre ?? null)
+  }
+
+  const confirmarAsignar = async (idTarima, asignaciones) => {
     try {
-      await api.asignarProductoATarima(id, idProd, null)
-      toast('Producto devuelto a sueltos', 'ok')
-      cargar()
+      const res = await api.asignarProductos(id, idTarima, asignaciones)
+      toast(`${res.asignados} asignado(s)`, 'ok')
+      if (res.advertencias) toast(res.advertencias.join(' · '), 'error')
+      setSel(new Set()); setModalAsignarPre(undefined); cargar()
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const eliminarTarima = async (idTarima) => {
-    if (!confirm('¿Eliminar esta tarima? Los productos vuelven a sueltos.')) return
+  const quitarUnDetalle = async (idDetalle) => {
+    if (!confirm('¿Quitar y devolver stock a pendiente?')) return
+    try { await api.quitarDetalle(id, idDetalle); toast('Devuelto', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const eliminarUnaTarima = async (idTarima) => {
+    if (!confirm('¿Eliminar esta tarima? Sus cantidades vuelven a pendiente.')) return
     try { await api.eliminarTarima(id, idTarima); toast('Tarima eliminada', 'ok'); cargar() }
     catch (e) { toast(e.message, 'error') }
   }
@@ -351,11 +432,21 @@ function Detalle({ id, volver, toast, verEtiquetas }) {
     catch (e) { toast(e.message, 'error') }
   }
 
+  const crearExtension = async (cantidad) => {
+    try {
+      const res = await api.agregarExtension(id, modalExt.id_producto, cantidad)
+      toast('Extension creada: ' + res.clave, 'ok')
+      setModalExt(null); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
   const toggleAbierta = (idTarima) => {
     const n = new Set(abiertas)
     n.has(idTarima) ? n.delete(idTarima) : n.add(idTarima)
     setAbiertas(n)
   }
+
+  const productosSeleccionados = productos.filter(p => sel.has(p.id_producto))
 
   return (
     <div className="contenedor">
@@ -381,83 +472,79 @@ function Detalle({ id, volver, toast, verEtiquetas }) {
 
       <div className={usaTarimas ? 'split-cols' : ''}>
         <div>
-          {usaSueltos && (
-            <div className="panel">
-              <div className="panel-titulo">
-                {usaTarimas ? 'Productos sueltos (carga suelta)' : 'Productos'}
-                <span className="chip chip-ok">{sueltos.length}</span>
+          <div className="panel">
+            <div className="panel-titulo">
+              Productos
+              <span className="chip chip-ok">{productos.length}</span>
+            </div>
+            {productos.length === 0 ? <div className="vacio">Sin productos.</div> : (
+              <>
+                <div style={{display:'grid',gridTemplateColumns:'20px 1fr 2fr 50px 60px 60px 50px',gap:8,padding:'6px 12px',fontSize:10,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em'}}>
+                  <span></span><span>Clave</span><span>Descripcion</span><span style={{textAlign:'right'}}>Total</span>
+                  <span style={{textAlign:'right'}}>Asig.</span><span style={{textAlign:'right'}}>Pend.</span><span></span>
+                </div>
+                {productos.map(p => {
+                  const done = p.cantidad_pendiente === 0
+                  const esExt = p.id_producto.includes('-EXT')
+                  return (
+                    <div key={p.id_producto}
+                      style={{display:'grid',gridTemplateColumns:'20px 1fr 2fr 50px 60px 60px 50px',gap:8,alignItems:'center',
+                        padding:'8px 12px',borderBottom:'1px solid var(--border)',fontSize:12,opacity:done?0.5:1}}>
+                      <input type="checkbox" disabled={done} checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} />
+                      <span style={{fontFamily:'var(--mono)',color:'var(--amarillo)',fontWeight:700,fontSize:11}}>{p.clave}</span>
+                      <span style={{color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</span>
+                      <span style={{textAlign:'right',fontFamily:'var(--mono)'}}>{p.cantidad_total}</span>
+                      <span style={{textAlign:'right',fontFamily:'var(--mono)',color:'var(--text3)'}}>{p.cantidad_asignada || 0}</span>
+                      <span style={{textAlign:'right',fontFamily:'var(--mono)',color: done ? 'var(--text3)' : 'var(--amarillo)'}}>{p.cantidad_pendiente}</span>
+                      <span>{!esExt && <button className="btn-quitar-mini" onClick={() => setModalExt(p)}>+Ext</button>}</span>
+                    </div>
+                  )
+                })}
+              </>
+            )}
+            {usaTarimas && sel.size > 0 && (
+              <div style={{marginTop:12,display:'flex',gap:8}}>
+                <button className="btn-principal" onClick={() => abrirAsignar()}>
+                  Asignar {sel.size} producto(s) a tarima
+                </button>
               </div>
-              {sueltos.length === 0
-                ? <div className="vacio">Sin productos sueltos pendientes.</div>
-                : sueltos.map(p => (
-                  <div key={p.id_producto} className="fila-prod-check" onClick={() => usaTarimas && toggleSel(p.id_producto)}>
-                    {usaTarimas && <input type="checkbox" checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} onClick={e => e.stopPropagation()} />}
-                    <span className="fp-clave">{p.clave}</span>
-                    <span className="fp-desc">{p.descripcion}</span>
-                    <span className="fp-cant">x{p.cantidad_total}</span>
-                  </div>
-                ))}
-              {usaTarimas && sel.size > 0 && (
-                <div style={{marginTop:12}}>
-                  <button className="btn-principal" onClick={() => setModalNueva(true)}>
-                    Formar tarima con {sel.size} producto(s)
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {!usaSueltos && (
-            <div className="panel">
-              <div className="panel-titulo">Productos para tarimas<span className="chip chip-ok">{productos.length}</span></div>
-              {productos.map(p => (
-                <div key={p.id_producto} className={'fila-prod-check' + (p.id_tarima ? ' en-tarima' : '')} onClick={() => !p.id_tarima && toggleSel(p.id_producto)}>
-                  <input type="checkbox" disabled={!!p.id_tarima} checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} onClick={e => e.stopPropagation()} />
-                  <span className="fp-clave">{p.clave}</span>
-                  <span className="fp-desc">{p.descripcion}</span>
-                  <span className="fp-cant">x{p.cantidad_total}</span>
-                  {p.id_tarima && <span className="chip-tarima-tag">T{tarimas.find(t => t.id_tarima === p.id_tarima)?.numero_tarima}</span>}
-                </div>
-              ))}
-              {sel.size > 0 && (
-                <div style={{marginTop:12}}>
-                  <button className="btn-principal" onClick={() => setModalNueva(true)}>
-                    Formar tarima con {sel.size} producto(s)
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {usaTarimas && (
           <div className="panel">
-            <div className="panel-titulo">Tarimas<span className="chip chip-ok">{tarimas.length}</span></div>
+            <div className="panel-titulo">
+              Tarimas<span className="chip chip-ok">{tarimas.length}</span>
+            </div>
+            <button className="btn-mini btn-mini-primario" style={{width:'100%',marginBottom:10}} onClick={() => setModalNueva(true)}>
+              + Nueva tarima
+            </button>
             {tarimas.length === 0
-              ? <div className="tarima-vacia">Sin tarimas. Selecciona productos y forma la primera.</div>
+              ? <div className="tarima-vacia">Sin tarimas todavia.</div>
               : tarimas.map(t => {
-                const prods = productos.filter(p => p.id_tarima === t.id_tarima)
                 const abierta = abiertas.has(t.id_tarima)
                 const cerrada = t.estatus === 'cerrada'
+                const detalle = t.productos || []
                 return (
                   <div key={t.id_tarima} className={'tarima-card' + (cerrada ? ' cerrada' : '')}>
                     <div className="tarima-head" onClick={() => toggleAbierta(t.id_tarima)}>
                       <span className="tarima-num">Tarima {t.numero_tarima}</span>
-                      <span className="tarima-count">{prods.length} prod.</span>
+                      <span className="tarima-count">{detalle.length} prod.</span>
                       <span className={'chip ' + (cerrada ? 'chip-ok' : 'chip-warn')}>{cerrada ? 'cerrada' : 'abierta'}</span>
                     </div>
                     {(t.largo_cm > 0 && t.ancho_cm > 0 && t.alto_cm > 0) &&
                       <div className="tarima-dims-tag">{t.largo_cm}×{t.ancho_cm}×{t.alto_cm} cm</div>}
                     {abierta && (
                       <div className="tarima-body">
-                        {prods.length === 0
+                        {detalle.length === 0
                           ? <div className="tarima-vacia">Sin productos</div>
-                          : prods.map(p => (
-                            <div key={p.id_producto} className="tarima-prod-row">
-                              <span className="tp-clave">{p.clave}</span>
-                              <span className="tp-desc">{p.descripcion}</span>
-                              <span className="tp-cant">x{p.cantidad_total}</span>
-                              {!cerrada && <button className="btn-quitar-mini" onClick={() => quitarDeTarima(p.id_producto)}>Quitar</button>}
+                          : detalle.map(d => (
+                            <div key={d.id_detalle} className="tarima-prod-row">
+                              <span className="tp-clave">{d.clave}</span>
+                              <span className="tp-desc">{d.descripcion}</span>
+                              <span className="tp-cant">x{d.cantidad_asignada}</span>
+                              {!cerrada && <button className="btn-quitar-mini" onClick={() => quitarUnDetalle(d.id_detalle)}>Quitar</button>}
                             </div>
                           ))}
                         <div className="tarima-acciones">
@@ -468,8 +555,9 @@ function Detalle({ id, volver, toast, verEtiquetas }) {
                             </>
                           ) : (
                             <>
-                              <button className="btn-mini btn-mini-exito" onClick={() => setModalCerrar(t.id_tarima)}>Cerrar tarima</button>
-                              <button className="btn-mini" onClick={() => eliminarTarima(t.id_tarima)}>Eliminar</button>
+                              <button className="btn-mini" onClick={() => { if (sel.size === 0) { toast('Selecciona productos pendientes arriba', 'error'); return } abrirAsignar(t.id_tarima) }}>+ Productos</button>
+                              <button className="btn-mini btn-mini-exito" onClick={() => setModalCerrar(t.id_tarima)}>Cerrar</button>
+                              <button className="btn-mini" onClick={() => eliminarUnaTarima(t.id_tarima)}>Eliminar</button>
                             </>
                           )}
                         </div>
@@ -483,10 +571,22 @@ function Detalle({ id, volver, toast, verEtiquetas }) {
       </div>
 
       {modalNueva && (
-        <ModalNuevaTarima seleccionados={[...sel]} onClose={() => setModalNueva(false)} onConfirmar={crearTarimaConSel} />
+        <ModalNuevaTarima onClose={() => setModalNueva(false)} onConfirmar={crearTarimaVacia} />
+      )}
+      {modalAsignarPre !== undefined && (
+        <ModalAsignar
+          tarimasAbiertas={abiertasT}
+          productos={productosSeleccionados}
+          idTarimaPre={modalAsignarPre}
+          onClose={() => setModalAsignarPre(undefined)}
+          onConfirmar={confirmarAsignar}
+        />
       )}
       {modalCerrar && (
         <ModalCerrarTarima onClose={() => setModalCerrar(null)} onConfirmar={cerrarConDims} />
+      )}
+      {modalExt && (
+        <ModalExtension producto={modalExt} onClose={() => setModalExt(null)} onConfirmar={crearExtension} />
       )}
     </div>
   )
