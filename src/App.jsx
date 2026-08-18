@@ -616,9 +616,10 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
           <button className="btn-sec" onClick={volver}>Volver</button>
           {productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX') &&
             <button className="btn-sec" onClick={() => verEtiquetasSueltas(id)}>Imprimir etiquetas sueltas</button>}
-          {tarimas.some(t => t.estatus === 'cerrada') && (
+          {(tarimas.some(t => t.estatus === 'cerrada') || ent.estatus === 'completada') && (
             <>
-              <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas de tarima</button>
+              {tarimas.some(t => t.estatus === 'cerrada') &&
+                <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas de tarima</button>}
               <button className="btn-sec" onClick={() => verPacking(id)}>Lista de empaque</button>
             </>
           )}
