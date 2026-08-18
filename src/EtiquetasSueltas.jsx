@@ -18,6 +18,7 @@ function PaginaEtiquetaSuelta({ d }) {
         {d.orden && <span className="et-suelta-ov">OV {d.orden}</span>}
         {d.sucursal && <span className="et-suelta-ov">{d.sucursal}</span>}
       </div>
+      {d.direccion && <div className="et-suelta-dir">{d.direccion}</div>}
 
       <div className="et-suelta-bottom">
         <div className="et-suelta-cant-wrap">
