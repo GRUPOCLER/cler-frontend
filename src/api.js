@@ -48,17 +48,21 @@ export const completarEntrega = (id)          => req('/api/entregas/' + id + '/c
 export const getDashboard     = ()            => req('/api/dashboard/')
 
 // ── TARIMAS ───────────────────────────────────────────────
-export const crearTarima = (idEntrega, idProductos = [], pesoPaletKg = 0) =>
+export const crearTarima = (idEntrega, pesoPaletKg = 0) =>
   req(`/api/entregas/${idEntrega}/tarimas`, {
     method: 'POST',
-    body: JSON.stringify({ id_productos: idProductos, peso_palet_kg: pesoPaletKg })
+    body: JSON.stringify({ peso_palet_kg: pesoPaletKg })
   })
 
-export const asignarProductoATarima = (idEntrega, idProducto, idTarima) =>
-  req(`/api/entregas/${idEntrega}/productos/${idProducto}/tarima`, {
-    method: 'PATCH',
-    body: JSON.stringify({ id_tarima: idTarima })
+// asignaciones: [{ id_producto, cantidad }, ...]
+export const asignarProductos = (idEntrega, idTarima, asignaciones) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/asignar`, {
+    method: 'POST',
+    body: JSON.stringify({ asignaciones })
   })
+
+export const quitarDetalle = (idEntrega, idDetalle) =>
+  req(`/api/entregas/${idEntrega}/detalle/${idDetalle}`, { method: 'DELETE' })
 
 export const eliminarTarima = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}`, { method: 'DELETE' })
@@ -80,6 +84,12 @@ export const actualizarDimensiones = (idEntrega, idTarima, dims) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/dimensiones`, {
     method: 'PATCH',
     body: JSON.stringify(dims)
+  })
+
+export const agregarExtension = (idEntrega, idProducto, cantidad) =>
+  req(`/api/entregas/${idEntrega}/productos/${idProducto}/extension`, {
+    method: 'POST',
+    body: JSON.stringify({ cantidad })
   })
 
 export const obtenerEtiqueta = (idEntrega, idTarima) =>
