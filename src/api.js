@@ -49,10 +49,10 @@ export const completarEntrega = (id)          => req('/api/entregas/' + id + '/c
 export const getDashboard     = ()            => req('/api/dashboard/')
 
 // ── TARIMAS ───────────────────────────────────────────────
-export const crearTarima = (idEntrega, pesoPaletKg = 0) =>
+export const crearTarima = (idEntrega, pesoPaletKg = 0, idsEntregasFusionadas = null) =>
   req(`/api/entregas/${idEntrega}/tarimas`, {
     method: 'POST',
-    body: JSON.stringify({ peso_palet_kg: pesoPaletKg })
+    body: JSON.stringify({ peso_palet_kg: pesoPaletKg, ids_entregas_fusionadas: idsEntregasFusionadas })
   })
 
 // asignaciones: [{ id_producto, cantidad }, ...]
@@ -95,6 +95,14 @@ export const agregarExtension = (idEntrega, idProducto, cantidad) =>
 
 export const obtenerEtiquetasSueltas = (idEntrega) =>
   req(`/api/entregas/${idEntrega}/etiquetas-sueltas`)
+
+// ── FUSION DE ENTREGAS Y LISTA DE EMPAQUE ────────────────
+export const candidatasFusion = () => req('/api/entregas/candidatas-fusion')
+
+export const fusionDetalle = (idsEntregas) =>
+  req('/api/entregas/fusion/detalle', { method: 'POST', body: JSON.stringify({ ids_entregas: idsEntregas }) })
+
+export const obtenerPacking = (idEntrega) => req(`/api/entregas/${idEntrega}/packing`)
 
 export const obtenerEtiqueta = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/etiqueta`)
