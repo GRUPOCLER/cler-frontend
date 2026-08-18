@@ -269,6 +269,7 @@ input,select{font-family:var(--sans);}
 .pk-bultos-num{font-size:26px;font-weight:900;color:#0d2d6b;line-height:1;}
 .pk-bulto{margin-bottom:14px;page-break-inside:avoid;}
 .pk-bulto-head{background:#0d2d6b;color:#fff;}
+.pk-bulto-head-suelto{background:#0a6b4a;}
 .pk-bulto-titulo{padding:6px 10px;font-weight:700;font-size:11px;text-align:left;}
 .pk-bulto-id{font-weight:400;font-size:9px;opacity:.75;margin-left:8px;}
 .pk-bulto-meta{padding:6px 10px;font-size:10px;text-align:right;font-weight:400;white-space:nowrap;}
