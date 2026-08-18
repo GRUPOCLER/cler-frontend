@@ -349,6 +349,53 @@ function ModalExtension({ producto, onClose, onConfirmar }) {
   )
 }
 
+// ── SUCURSALES RAIKER ─────────────────────────────────────
+const SUCURSALES_RAIKER = [
+  'ACAYUCAN','APIZACO','ATLIXCO','BOCA','BOTICARIA','BOULEVARD','CANCUN','CARDEL',
+  'CARDENAS','CBA. AVENIDA','CBA. ESQUINA','CD. ISLA','COATZA','COSAMALOAPAN',
+  'DIAZ MIRON','EMILIANO ZAPATA','GUADALAJARA','IZUCAR','LAS CHOAPAS','LOMA BONITA',
+  'MALIBRAN','MARTINEZ','MERIDA CANEK','MERIDA CENTRO','OAXACA','ORIZABA','PACHUCA',
+  'PAPANTLA','PEROTE','PUEBLA','SALINA CRUZ','SAN ANDRES','TECAMACHALCO',
+  'TEHUACAN AVE','TEHUACAN BLVD.','TEJERIA','TENOSIQUE','TEXMELUCAN','TIERRA BLANCA',
+  'TIZAYUCA','TLALNEPANTLA','TUXPAN','TUXTEPEC','VER NORTE','VILLAHERMOSA',
+  'XALAPA','XALAPA 2'
+]
+
+// ── MODAL: SUCURSAL RAIKER ────────────────────────────────
+function ModalSucursal({ actual, onClose, onConfirmar }) {
+  const [valor, setValor] = useState(actual || '')
+  return (
+    <Modal titulo="Sucursal Raiker" sub="Selecciona la sucursal de destino" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" disabled={!valor} onClick={() => onConfirmar(valor)}>Guardar</button>
+      </>}>
+      <select className="inp" value={valor} onChange={e => setValor(e.target.value)} autoFocus>
+        <option value="">-- Selecciona sucursal --</option>
+        {SUCURSALES_RAIKER.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+    </Modal>
+  )
+}
+
+// ── MODAL: CLIENTE Y DIRECCION ────────────────────────────
+function ModalCliente({ nombre, direccion, onClose, onConfirmar }) {
+  const [n, setN] = useState(nombre || '')
+  const [d, setD] = useState(direccion || '')
+  return (
+    <Modal titulo="Cliente y direccion" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar(n, d)}>Guardar</button>
+      </>}>
+      <label className="dim-label">Nombre del cliente</label>
+      <input className="inp" style={{marginBottom:12}} value={n} onChange={e => setN(e.target.value)} autoFocus />
+      <label className="dim-label">Direccion</label>
+      <textarea className="inp" rows={3} style={{resize:'vertical'}} value={d} onChange={e => setD(e.target.value)} />
+    </Modal>
+  )
+}
+
 // ── DETALLE DE ENTREGA ───────────────────────────────────
 function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
   const [ent, setEnt] = useState(null)
@@ -357,6 +404,8 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
   const [modalAsignarPre, setModalAsignarPre] = useState(undefined) // undefined=cerrado, null|id_tarima=abierto
   const [modalCerrar, setModalCerrar] = useState(null)
   const [modalExt, setModalExt] = useState(null)
+  const [modalSucursal, setModalSucursal] = useState(false)
+  const [modalCliente, setModalCliente] = useState(false)
   const [abiertas, setAbiertas] = useState(new Set())
 
   const cargar = () => api.detalleEntrega(id).then(d => {
@@ -441,6 +490,22 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
     } catch (e) { toast(e.message, 'error') }
   }
 
+  const guardarSucursal = async (sucursal) => {
+    try {
+      await api.actualizarEntrega(id, { sucursal })
+      toast('Sucursal actualizada', 'ok')
+      setModalSucursal(false); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const guardarCliente = async (nombre_cliente, direccion) => {
+    try {
+      await api.actualizarEntrega(id, { nombre_cliente, direccion })
+      toast('Cliente actualizado', 'ok')
+      setModalCliente(false); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
   const toggleAbierta = (idTarima) => {
     const n = new Set(abiertas)
     n.has(idTarima) ? n.delete(idTarima) : n.add(idTarima)
@@ -448,18 +513,27 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
   }
 
   const productosSeleccionados = productos.filter(p => sel.has(p.id_producto))
+  const esRaiker = (ent.comercializador || '').toLowerCase().includes('raiker')
 
   return (
     <div className="contenedor">
       <div className="detalle-head">
         <div>
           <div className="detalle-folio">{ent.num_entrega}</div>
-          <div className="detalle-cliente">{ent.nombre_cliente}</div>
+          <div className="detalle-cliente">
+            {ent.nombre_cliente || 'Sin cliente'}
+            <button className="btn-quitar-mini" style={{marginLeft:8}} onClick={() => setModalCliente(true)}>Editar</button>
+          </div>
           {ent.direccion && <div className="detalle-dir">{ent.direccion}</div>}
-          <div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
+          <div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
             <span className={'badge-sistema badge-' + ent.sistema}>{ent.sistema}</span>
             <span className={'badge-estatus badge-' + ent.estatus}>{ent.estatus}</span>
             {ent.orden && <span className="chip chip-warn">{ent.orden}</span>}
+            {esRaiker && (
+              <span className="chip chip-raiker" style={{cursor:'pointer'}} onClick={() => setModalSucursal(true)}>
+                {ent.sucursal ? 'Suc: ' + ent.sucursal : 'Elegir sucursal ✎'}
+              </span>
+            )}
           </div>
         </div>
         <div className="acciones">
@@ -590,6 +664,13 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
       )}
       {modalExt && (
         <ModalExtension producto={modalExt} onClose={() => setModalExt(null)} onConfirmar={crearExtension} />
+      )}
+      {modalSucursal && (
+        <ModalSucursal actual={ent.sucursal} onClose={() => setModalSucursal(false)} onConfirmar={guardarSucursal} />
+      )}
+      {modalCliente && (
+        <ModalCliente nombre={ent.nombre_cliente} direccion={ent.direccion}
+          onClose={() => setModalCliente(false)} onConfirmar={guardarCliente} />
       )}
     </div>
   )
