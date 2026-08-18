@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import * as api from './api.js'
 import Etiquetas from './Etiquetas.jsx'
+import EtiquetasSueltas from './EtiquetasSueltas.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 function useToast() {
@@ -349,7 +350,7 @@ function ModalExtension({ producto, onClose, onConfirmar }) {
 }
 
 // ── DETALLE DE ENTREGA ───────────────────────────────────
-function Detalle({ id, volver, toast, verEtiquetas }) {
+function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas }) {
   const [ent, setEnt] = useState(null)
   const [sel, setSel] = useState(new Set())
   const [modalNueva, setModalNueva] = useState(false)
@@ -463,8 +464,10 @@ function Detalle({ id, volver, toast, verEtiquetas }) {
         </div>
         <div className="acciones">
           <button className="btn-sec" onClick={volver}>Volver</button>
+          {productos.length > 0 && (ent.sistema === 'CS' || ent.sistema === 'MIX') &&
+            <button className="btn-sec" onClick={() => verEtiquetasSueltas(id)}>Imprimir etiquetas</button>}
           {tarimas.some(t => t.estatus === 'cerrada') &&
-            <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas</button>}
+            <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas de tarima</button>}
           {ent.estatus === 'pendiente' &&
             <button className="btn-principal" onClick={completar}>Completar entrega</button>}
         </div>
@@ -618,6 +621,29 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
   )
 }
 
+// ── VISTA DE ETIQUETAS SUELTAS (por SKU, carga suelta) ───
+function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
+  const [datos, setDatos] = useState(null)
+
+  useEffect(() => {
+    api.obtenerEtiquetasSueltas(idEntrega).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+  }, [idEntrega])
+
+  if (!datos) return <div className="cargando">Generando etiquetas...</div>
+
+  return (
+    <div>
+      <div className="contenedor" style={{marginBottom: 12}}>
+        <div className="acciones" style={{marginLeft: 0}}>
+          <button className="btn-sec" onClick={volver}>Volver</button>
+          <button className="btn-principal" onClick={() => window.print()}>Imprimir</button>
+        </div>
+      </div>
+      <EtiquetasSueltas datos={datos} />
+    </div>
+  )
+}
+
 // ── APP ──────────────────────────────────────────────────
 export default function App() {
   const [logueado, setLogueado] = useState(!!api.getToken())
@@ -633,10 +659,15 @@ export default function App() {
   const verEtiquetas = (idEnt, idTar = null) => {
     setIdDetalle(idEnt); setEtiquetaTarima(idTar); setVista('etiquetas')
   }
+  const verEtiquetasSueltas = (idEnt) => {
+    setIdDetalle(idEnt); setVista('etiquetas-sueltas')
+  }
+
+  const enVistaEtiqueta = vista === 'etiquetas' || vista === 'etiquetas-sueltas'
 
   return (
     <div className="shell">
-      {vista !== 'etiquetas' && (
+      {!enVistaEtiqueta && (
         <div className="topbar">
           <div className="topbar-marca">GRUPO<span>CLER</span></div>
           <nav className="topbar-nav">
@@ -657,9 +688,13 @@ export default function App() {
         {vista === 'dashboard' && <Dashboard irDetalle={irDetalle} />}
         {vista === 'nueva'     && <NuevaEntrega toast={toast} irDetalle={irDetalle} />}
         {vista === 'detalle'   && idDetalle &&
-          <Detalle id={idDetalle} volver={() => setVista('dashboard')} toast={toast} verEtiquetas={verEtiquetas} />}
+          <Detalle id={idDetalle} volver={() => setVista('dashboard')} toast={toast}
+            verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} />}
         {vista === 'etiquetas' && idDetalle &&
           <VistaEtiquetas idEntrega={idDetalle} idTarima={etiquetaTarima}
+            volver={() => setVista('detalle')} toast={toast} />}
+        {vista === 'etiquetas-sueltas' && idDetalle &&
+          <VistaEtiquetasSueltas idEntrega={idDetalle}
             volver={() => setVista('detalle')} toast={toast} />}
       </div>
       <Toast />
