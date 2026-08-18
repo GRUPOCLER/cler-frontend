@@ -366,8 +366,12 @@ input,select{font-family:var(--sans);}
 .et-suelta-clave{font-family:monospace;font-size:17px;font-weight:900;color:#000;letter-spacing:.01em;line-height:1.1;}
 .et-suelta-sku{font-size:9px;font-weight:700;color:#444;white-space:nowrap;}
 .et-suelta-desc{
-  font-size:9.5px;color:#111;line-height:1.25;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  font-size:9px;color:#111;line-height:1.2;
+  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
+}
+.et-suelta-dir{
+  font-size:7.5px;color:#444;line-height:1.15;
+  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
 }
 .et-suelta-mid{display:flex;gap:8px;flex-wrap:wrap;font-size:8px;color:#333;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:2px 0;}
 .et-suelta-cliente{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;}
