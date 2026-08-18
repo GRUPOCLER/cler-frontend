@@ -3,7 +3,7 @@
 // ============================================================
 
 export default function ListaEmpaque({ datos }) {
-  const { entrega, es_fusion, entregas_involucradas, remitente, tarimas, total_bultos, total_piezas, peso_palet_total_kg } = datos
+  const { entrega, es_fusion, entregas_involucradas, remitente, tarimas, sueltos, total_bultos, total_piezas, peso_palet_total_kg } = datos
 
   const folios = es_fusion ? entregas_involucradas.map(e => e.num_entrega).filter(Boolean).join(' + ') : entrega.num_entrega
   const ovs    = es_fusion ? entregas_involucradas.map(e => e.orden).filter(Boolean).join(' + ') : (entrega.orden || '-')
@@ -99,6 +99,37 @@ export default function ListaEmpaque({ datos }) {
           </table>
         </div>
       ))}
+
+      {sueltos && sueltos.length > 0 && (
+        <div className="pk-bulto">
+          <table className="pk-tabla-bulto">
+            <thead>
+              <tr className="pk-bulto-head pk-bulto-head-suelto">
+                <th colSpan={4} className="pk-bulto-titulo">
+                  CARGA SUELTA
+                  <span className="pk-bulto-id">{sueltos.length} SKU{sueltos.length !== 1 ? 's' : ''}</span>
+                </th>
+              </tr>
+              <tr className="pk-col-head">
+                <th style={{textAlign:'left'}}>Clave</th>
+                <th style={{textAlign:'left'}}>Descripcion</th>
+                <th style={{textAlign:'right'}}>Cant.</th>
+                <th style={{textAlign:'center'}}>Unidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sueltos.map((p, i) => (
+                <tr key={p.id_producto} className={i % 2 === 0 ? 'pk-row-a' : 'pk-row-b'}>
+                  <td className="pk-td-clave">{p.clave}</td>
+                  <td>{p.descripcion}</td>
+                  <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_pendiente ?? p.cantidad_total}</td>
+                  <td style={{textAlign:'center',color:'#555'}}>{p.unidad}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <table className="pk-tabla-totales">
         <tbody>
