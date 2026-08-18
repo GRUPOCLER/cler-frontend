@@ -239,6 +239,77 @@ input,select{font-family:var(--sans);}
   *{animation:none!important;transition:none!important;}
 }
 
+/* ── LISTA DE EMPAQUE (packing list, imprimible) ────────── */
+.pk-doc{
+  max-width:900px;margin:0 auto;background:#fff;color:#111;
+  padding:32px;font-family:Arial,sans-serif;font-size:11px;line-height:1.4;
+}
+.pk-banner-fusion{
+  background:#fff3d6;border:1px solid #c98a00;border-radius:4px;
+  padding:6px 12px;margin-bottom:10px;text-align:center;
+  font-size:10px;font-weight:900;color:#7a5400;
+}
+.pk-tabla-head,.pk-tabla-info,.pk-tabla-bulto,.pk-tabla-totales,.pk-tabla-firmas{
+  width:100%;border-collapse:collapse;margin-bottom:0;
+}
+.pk-box{padding:14px 16px;border:2px solid #0d2d6b;vertical-align:top;}
+.pk-box-remitente{width:55%;}
+.pk-box-titulo{width:45%;border-left:none;text-align:right;}
+.pk-label{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#888;margin-bottom:5px;}
+.pk-remitente-nombre{font-size:15px;font-weight:800;color:#0d2d6b;}
+.pk-titulo-grande{font-size:26px;font-weight:900;color:#0d2d6b;line-height:1;}
+.pk-fecha{font-size:10px;color:#333;margin-top:8px;}
+.pk-info-cell{padding:9px 12px;border:1px solid #c8d0e0;border-top:none;vertical-align:top;}
+.pk-info-mono{font-family:monospace;font-weight:800;color:#0d2d6b;font-size:12px;}
+.pk-info-ov{color:#c98a00;}
+.pk-info-cliente{font-size:12px;font-weight:700;}
+.pk-info-sucursal{font-size:10px;font-weight:900;color:#c98a00;margin-top:3px;}
+.pk-info-dir{font-size:10px;color:#444;}
+.pk-info-bultos{text-align:center;}
+.pk-bultos-num{font-size:26px;font-weight:900;color:#0d2d6b;line-height:1;}
+.pk-bulto{margin-bottom:14px;page-break-inside:avoid;}
+.pk-bulto-head{background:#0d2d6b;color:#fff;}
+.pk-bulto-titulo{padding:6px 10px;font-weight:700;font-size:11px;text-align:left;}
+.pk-bulto-id{font-weight:400;font-size:9px;opacity:.75;margin-left:8px;}
+.pk-bulto-meta{padding:6px 10px;font-size:10px;text-align:right;font-weight:400;white-space:nowrap;}
+.pk-col-head th{background:#0d2d6b;color:#fff;padding:5px 8px;font-size:8.5px;
+  text-transform:uppercase;letter-spacing:.06em;border:1px solid #0d2d6b;font-weight:600;}
+.pk-row-a td{background:#fff;}
+.pk-row-b td{background:#e8eef8;}
+.pk-tabla-bulto td{padding:5px 8px;font-size:10px;border:1px solid #c8d0e0;}
+.pk-td-clave{font-family:monospace;font-size:9.5px;color:#1a56c4;}
+.pk-tabla-totales{margin-top:4px;border:2px solid #0d2d6b;}
+.pk-totales-head td{background:#0d2d6b;color:#fff;padding:6px 10px;font-size:10px;
+  font-weight:700;text-transform:uppercase;}
+.pk-total-cell{padding:10px 14px;border-right:1px solid #c8d0e0;text-align:center;}
+.pk-total-num{font-size:20px;font-weight:900;color:#0d2d6b;}
+.pk-total-num-sm{font-size:16px;font-weight:700;}
+.pk-ovs-incluidas{font-size:9px;color:#888;margin-top:8px;padding:8px 0;}
+.pk-ov-chip{display:inline-block;background:#e8eef8;border:1px solid #c8d0e0;border-radius:10px;
+  padding:2px 10px;margin:2px 4px 2px 0;font-family:monospace;font-size:9px;color:#0d2d6b;}
+.pk-tabla-firmas{margin-top:36px;}
+.pk-firma-cell{width:48%;padding-top:8px;border-top:1px solid #333;vertical-align:top;}
+.pk-firma-sep{width:4%;}
+.pk-firma-nombre{font-size:11px;font-weight:700;color:#111;}
+.pk-firma-fecha{margin-top:28px;font-size:9px;color:#aaa;}
+.pk-firma-linea{margin-top:28px;font-size:9px;color:#aaa;}
+
+@media print{
+  .pk-doc{max-width:100%;padding:0;}
+  .topbar,.contenedor>.acciones{display:none!important;}
+}
+
+/* ── MODAL FUSION ────────────────────────────────────────── */
+.fusion-grupo{margin-bottom:16px;}
+.fusion-cliente{font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;}
+.fusion-fila{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;
+  background:var(--bg3);border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:12px;
+}
+.fusion-fila input{cursor:pointer;}
+.fusion-fila .ff-folio{font-family:var(--mono);color:var(--amarillo);min-width:130px;}
+.fusion-fila .ff-ov{color:var(--text2);flex:1;}
+
 /* ── ARMADO DE TARIMAS ──────────────────────────────────── */
 .split-cols{display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start;}
 @media (max-width:820px){.split-cols{grid-template-columns:1fr;}}
