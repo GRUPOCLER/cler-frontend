@@ -92,6 +92,9 @@ export const agregarExtension = (idEntrega, idProducto, cantidad) =>
     body: JSON.stringify({ cantidad })
   })
 
+export const obtenerEtiquetasSueltas = (idEntrega) =>
+  req(`/api/entregas/${idEntrega}/etiquetas-sueltas`)
+
 export const obtenerEtiqueta = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/etiqueta`)
 
