@@ -3,6 +3,7 @@ import * as api from './api.js'
 import Etiquetas from './Etiquetas.jsx'
 import EtiquetasSueltas from './EtiquetasSueltas.jsx'
 import ListaEmpaque from './ListaEmpaque.jsx'
+import AdminPanel from './AdminPanel.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 function useToast() {
@@ -548,6 +549,11 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
     catch (e) { toast(e.message, 'error') }
   }
 
+  const reabrirEnt = async () => {
+    try { await api.reabrirEntrega(id); toast('Entrega reabierta', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
   const crearTarimaVacia = async (pesoPaletKg) => {
     try {
       await api.crearTarima(id, pesoPaletKg, ent.idsFusionActivos || null)
@@ -663,6 +669,8 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
           )}
           {ent.estatus === 'pendiente' &&
             <button className="btn-principal" onClick={completar}>Completar entrega</button>}
+          {ent.estatus === 'completada' &&
+            <button className="btn-sec" onClick={reabrirEnt}>Reabrir entrega</button>}
         </div>
       </div>
 
@@ -806,6 +814,17 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
     carga.then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
   }, [idEntrega, idTarima])
 
+  const imprimir = async () => {
+    try {
+      if (idTarima) {
+        await api.marcarImpresaTarima(idEntrega, idTarima)
+      } else {
+        for (const d of datos) await api.marcarImpresaTarima(idEntrega, d.id_tarima)
+      }
+      window.print()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
   if (!datos) return <div className="cargando">Generando etiqueta(s)...</div>
 
   return (
@@ -813,7 +832,7 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
       <div className="contenedor" style={{marginBottom: 12}}>
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
-          <button className="btn-principal" onClick={() => window.print()}>Imprimir</button>
+          <button className="btn-principal" onClick={imprimir}>Imprimir</button>
         </div>
       </div>
       <Etiquetas datos={datos} />
@@ -831,12 +850,17 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
 
   if (!datos) return <div className="cargando">Generando etiquetas...</div>
 
+  const imprimir = async () => {
+    try { await api.marcarImpresaSueltas(idEntrega); window.print() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
   return (
     <div>
       <div className="contenedor" style={{marginBottom: 12}}>
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
-          <button className="btn-principal" onClick={() => window.print()}>Imprimir</button>
+          <button className="btn-principal" onClick={imprimir}>Imprimir</button>
         </div>
       </div>
       <EtiquetasSueltas datos={datos} />
@@ -854,12 +878,17 @@ function VistaPacking({ idEntrega, volver, toast }) {
 
   if (!datos) return <div className="cargando">Generando lista de empaque...</div>
 
+  const imprimir = async () => {
+    try { await api.marcarImpresoPacking(idEntrega); window.print() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
   return (
     <div>
       <div className="contenedor" style={{marginBottom: 12}}>
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
-          <button className="btn-principal" onClick={() => window.print()}>Imprimir</button>
+          <button className="btn-principal" onClick={imprimir}>Imprimir</button>
         </div>
       </div>
       <ListaEmpaque datos={datos} />
@@ -912,6 +941,10 @@ export default function App() {
             <button className={'nav-btn' + (vista === 'nueva' ? ' activo' : '')}
               onClick={() => setVista('nueva')}>Nueva entrega</button>
             <button className="nav-btn" onClick={() => setModalFusion(true)}>Fusionar entregas</button>
+            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
+              <button className={'nav-btn' + (vista === 'admin' ? ' activo' : '')}
+                onClick={() => setVista('admin')}>Administracion</button>
+            )}
           </nav>
           <div className="topbar-user">
             <span>{user?.nombre || user?.usuario}</span>
@@ -936,6 +969,7 @@ export default function App() {
         {vista === 'packing' && idDetalle &&
           <VistaPacking idEntrega={idDetalle}
             volver={() => setVista('detalle')} toast={toast} />}
+        {vista === 'admin' && <AdminPanel toast={toast} miRol={user?.rol} />}
       </div>
       {modalFusion && (
         <ModalFusion onClose={() => setModalFusion(false)} onConfirmar={confirmarFusion} />
