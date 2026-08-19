@@ -97,7 +97,14 @@ function Dashboard({ irDetalle }) {
             <tbody>
               {entregas.map(e => (
                 <tr key={e.id_entrega} onClick={() => irDetalle(e.id_entrega)}>
-                  <td style={{fontFamily:'var(--mono)',fontWeight:700}}>{e.num_entrega}</td>
+                  <td>
+                    <span style={{fontFamily:'var(--mono)',fontWeight:700}}>{e.num_entrega}</span>
+                    {e.es_fusion && (
+                      <span className="chip chip-fusion" title={'Fusionada con: ' + e.fusion_con.join(', ')}>
+                        🔗 +{e.fusion_con.length}
+                      </span>
+                    )}
+                  </td>
                   <td><span className={'badge-sistema badge-' + e.sistema}>{e.sistema}</span></td>
                   <td>{e.nombre_cliente || '—'}</td>
                   <td style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--text3)'}}>
