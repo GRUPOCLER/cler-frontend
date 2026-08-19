@@ -142,6 +142,7 @@ input,select{font-family:var(--sans);}
 .chip-ok{background:#10b98122;color:#10b981;}
 .chip-warn{background:#f5b90022;color:var(--amarillo);}
 .chip-raiker{background:#3b82f622;color:#3b82f6;}
+.chip-fusion{background:#a855f722;color:#a855f7;margin-left:6px;cursor:help;}
 .chip-korei{background:#a855f722;color:#a855f7;}
 .dropzone{
   border:2px dashed var(--border2);border-radius:12px;
