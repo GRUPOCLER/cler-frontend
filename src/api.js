@@ -104,6 +104,30 @@ export const fusionDetalle = (idsEntregas) =>
 
 export const obtenerPacking = (idEntrega) => req(`/api/entregas/${idEntrega}/packing`)
 
+// ── CONTROL DE IMPRESION Y REAPERTURA ────────────────────
+export const marcarImpresaTarima = (idEntrega, idTarima) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/marcar-impresa`, { method: 'POST' })
+
+export const marcarImpresaSueltas = (idEntrega) =>
+  req(`/api/entregas/${idEntrega}/etiquetas-sueltas/marcar-impresa`, { method: 'POST' })
+
+export const marcarImpresoPacking = (idEntrega) =>
+  req(`/api/entregas/${idEntrega}/packing/marcar-impreso`, { method: 'POST' })
+
+export const reabrirEntrega = (idEntrega) =>
+  req(`/api/entregas/${idEntrega}/reabrir`, { method: 'POST' })
+
+// ── ADMINISTRACION (usuarios y logs) ─────────────────────
+export const listarUsuarios = () => req('/api/admin/usuarios')
+
+export const crearUsuario = (body) =>
+  req('/api/admin/usuarios', { method: 'POST', body: JSON.stringify(body) })
+
+export const editarUsuario = (usuario, body) =>
+  req(`/api/admin/usuarios/${usuario}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const verLogs = () => req('/api/admin/logs')
+
 export const obtenerEtiqueta = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/etiqueta`)
 
