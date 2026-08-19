@@ -56,13 +56,39 @@ function Login({ onOk }) {
 }
 
 // ── DASHBOARD ────────────────────────────────────────────
+const COLORES_FUSION = ['#a855f7', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16', '#f43f5e']
+
+function agruparPorFusion(entregas) {
+  const coloresPorGrupo = {}
+  let siguienteColor = 0
+  const emitidos = new Set()
+  const resultado = []
+
+  entregas.forEach(e => {
+    if (emitidos.has(e.id_entrega)) return
+    if (e.grupo_fusion) {
+      if (!(e.grupo_fusion in coloresPorGrupo)) {
+        coloresPorGrupo[e.grupo_fusion] = COLORES_FUSION[siguienteColor % COLORES_FUSION.length]
+        siguienteColor++
+      }
+      const color = coloresPorGrupo[e.grupo_fusion]
+      const delGrupo = entregas.filter(x => x.grupo_fusion === e.grupo_fusion)
+      delGrupo.forEach(x => { emitidos.add(x.id_entrega); resultado.push({ ...x, colorFusion: color }) })
+    } else {
+      emitidos.add(e.id_entrega)
+      resultado.push(e)
+    }
+  })
+  return resultado
+}
+
 function Dashboard({ irDetalle }) {
   const [stats, setStats] = useState(null)
   const [entregas, setEntregas] = useState(null)
 
   useEffect(() => {
     api.getDashboard().then(setStats).catch(() => setStats({}))
-    api.listarEntregas('limite=25').then(setEntregas).catch(() => setEntregas([]))
+    api.listarEntregas('limite=25').then(d => setEntregas(agruparPorFusion(d))).catch(() => setEntregas([]))
   }, [])
 
   return (
@@ -96,11 +122,16 @@ function Dashboard({ irDetalle }) {
             </tr></thead>
             <tbody>
               {entregas.map(e => (
-                <tr key={e.id_entrega} onClick={() => irDetalle(e.id_entrega)}>
+                <tr key={e.id_entrega} onClick={() => irDetalle(e.id_entrega)}
+                  style={e.colorFusion ? {
+                    background: e.colorFusion + '14',
+                    borderLeft: '3px solid ' + e.colorFusion
+                  } : undefined}>
                   <td>
                     <span style={{fontFamily:'var(--mono)',fontWeight:700}}>{e.num_entrega}</span>
                     {e.es_fusion && (
-                      <span className="chip chip-fusion" title={'Fusionada con: ' + e.fusion_con.join(', ')}>
+                      <span className="chip" style={{background:e.colorFusion+'22',color:e.colorFusion,marginLeft:6,cursor:'help'}}
+                        title={'Fusionada con: ' + e.fusion_con.join(', ')}>
                         🔗 +{e.fusion_con.length}
                       </span>
                     )}
