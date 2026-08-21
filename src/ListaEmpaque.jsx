@@ -50,7 +50,7 @@ export default function ListaEmpaque({ datos }) {
               {entrega.sucursal && <div className="pk-info-sucursal">Sucursal: {entrega.sucursal}</div>}
             </td>
             <td className="pk-info-cell">
-              <div className="pk-label">Direccion</div>
+              <div className="pk-label">Dirección</div>
               <div className="pk-info-dir">{entrega.direccion || '-'}</div>
             </td>
             <td className="pk-info-cell pk-info-bultos">
@@ -79,7 +79,7 @@ export default function ListaEmpaque({ datos }) {
               </tr>
               <tr className="pk-col-head">
                 <th style={{textAlign:'left'}}>Clave</th>
-                <th style={{textAlign:'left'}}>Descripcion</th>
+                <th style={{textAlign:'left'}}>Descripción</th>
                 <th style={{textAlign:'right'}}>Cant.</th>
                 <th style={{textAlign:'center'}}>Unidad</th>
               </tr>
@@ -112,7 +112,7 @@ export default function ListaEmpaque({ datos }) {
               </tr>
               <tr className="pk-col-head">
                 <th style={{textAlign:'left'}}>Clave</th>
-                <th style={{textAlign:'left'}}>Descripcion</th>
+                <th style={{textAlign:'left'}}>Descripción</th>
                 <th style={{textAlign:'right'}}>Cant.</th>
                 <th style={{textAlign:'center'}}>Unidad</th>
               </tr>
