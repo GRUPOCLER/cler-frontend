@@ -119,7 +119,7 @@ function agruparPorFusion(entregas) {
   return resultado
 }
 
-function Dashboard({ irDetalle }) {
+function Dashboard({ irDetalle, onFusionar }) {
   const [stats, setStats] = useState(null)
   const [entregas, setEntregas] = useState(null)
 
@@ -149,7 +149,12 @@ function Dashboard({ irDetalle }) {
       </div>
 
       <div className="panel">
-        <div className="panel-titulo">Entregas recientes</div>
+        <div className="panel-titulo">
+          Entregas recientes
+          <button className="btn-quitar-mini" style={{marginLeft:'auto'}} onClick={onFusionar}>
+            Fusionar entregas
+          </button>
+        </div>
         {!entregas ? <div className="cargando">Cargando...</div>
           : entregas.length === 0 ? <div className="vacio">Sin entregas todavia. Crea la primera desde Nueva entrega.</div>
           : (
@@ -996,6 +1001,25 @@ function VistaPacking({ idEntrega, volver, toast }) {
   )
 }
 
+// ── MIGAJA DE CONTEXTO — siempre visible, incluso al imprimir ──
+function Migaja({ vista, idDetalle }) {
+  const partes = ['Pulso']
+  if (vista === 'nueva') partes.push('Nueva entrega')
+  if (vista === 'detalle') partes.push(idDetalle || 'Entrega')
+  if (vista === 'etiquetas') { partes.push(idDetalle || 'Entrega'); partes.push('Etiquetas de tarima') }
+  if (vista === 'etiquetas-sueltas') { partes.push(idDetalle || 'Entrega'); partes.push('Etiquetas sueltas') }
+  if (vista === 'packing') { partes.push(idDetalle || 'Entrega'); partes.push('Lista de empaque') }
+  if (vista === 'reimpresiones') { partes.length = 0; partes.push('Reimpresiones') }
+  if (vista === 'admin') { partes.length = 0; partes.push('Administracion') }
+  return (
+    <div className="migaja">
+      {partes.map((p, i) => (
+        <span key={i}>{i > 0 && <span className="migaja-sep">›</span>}{p}</span>
+      ))}
+    </div>
+  )
+}
+
 // ── APP ──────────────────────────────────────────────────
 export default function App() {
   const [logueado, setLogueado] = useState(!!api.getToken())
@@ -1043,6 +1067,7 @@ export default function App() {
 
   return (
     <div className="shell">
+      <Migaja vista={vista} idDetalle={idDetalle} />
       {!enVistaEtiqueta && (
         <div className="topbar">
           <div className="topbar-marca">GRUPO<span>CLER</span></div>
@@ -1051,7 +1076,6 @@ export default function App() {
               onClick={() => setVista('dashboard')}>Pulso</button>
             <button className={'nav-btn' + (vista === 'nueva' ? ' activo' : '')}
               onClick={() => setVista('nueva')}>Nueva entrega</button>
-            <button className="nav-btn" onClick={() => setModalFusion(true)}>Fusionar entregas</button>
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
               <button className={'nav-btn' + (vista === 'reimpresiones' ? ' activo' : '')}
                 onClick={() => setVista('reimpresiones')}>
@@ -1075,7 +1099,7 @@ export default function App() {
         </div>
       )}
       <div className="contenido">
-        {vista === 'dashboard' && <Dashboard irDetalle={irDetalle} />}
+        {vista === 'dashboard' && <Dashboard irDetalle={irDetalle} onFusionar={() => setModalFusion(true)} />}
         {vista === 'nueva'     && <NuevaEntrega toast={toast} irDetalle={irDetalle} />}
         {vista === 'detalle'   && idDetalle &&
           <Detalle id={idDetalle} volver={() => setVista('dashboard')} toast={toast}
