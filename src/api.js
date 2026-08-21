@@ -105,14 +105,20 @@ export const fusionDetalle = (idsEntregas) =>
 export const obtenerPacking = (idEntrega) => req(`/api/entregas/${idEntrega}/packing`)
 
 // ── CONTROL DE IMPRESION Y REAPERTURA ────────────────────
-export const marcarImpresaTarima = (idEntrega, idTarima) =>
-  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/marcar-impresa`, { method: 'POST' })
+export const marcarImpresaTarima = (idEntrega, idTarima, motivo = null) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/marcar-impresa`, {
+    method: 'POST', body: JSON.stringify({ motivo })
+  })
 
-export const marcarImpresaSueltas = (idEntrega) =>
-  req(`/api/entregas/${idEntrega}/etiquetas-sueltas/marcar-impresa`, { method: 'POST' })
+export const marcarImpresaSueltas = (idEntrega, motivo = null) =>
+  req(`/api/entregas/${idEntrega}/etiquetas-sueltas/marcar-impresa`, {
+    method: 'POST', body: JSON.stringify({ motivo })
+  })
 
-export const marcarImpresoPacking = (idEntrega) =>
-  req(`/api/entregas/${idEntrega}/packing/marcar-impreso`, { method: 'POST' })
+export const marcarImpresoPacking = (idEntrega, motivo = null) =>
+  req(`/api/entregas/${idEntrega}/packing/marcar-impreso`, {
+    method: 'POST', body: JSON.stringify({ motivo })
+  })
 
 export const reabrirEntrega = (idEntrega) =>
   req(`/api/entregas/${idEntrega}/reabrir`, { method: 'POST' })
