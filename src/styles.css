@@ -149,6 +149,7 @@ input,select{font-family:var(--sans);}
 .panel{
   background:var(--bg2);border:1px solid var(--border);
   border-radius:12px;padding:20px;margin-bottom:16px;
+  overflow-x:auto;
 }
 .panel-titulo{font-weight:700;font-size:14px;margin-bottom:14px;
   display:flex;align-items:center;gap:8px;}
@@ -181,7 +182,7 @@ input,select{font-family:var(--sans);}
 .lista-scroll{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);}
 
 /* ── TABLA ENTREGAS ─────────────────────────────────────── */
-.tabla{width:100%;border-collapse:collapse;}
+.tabla{width:100%;border-collapse:collapse;min-width:560px;}
 .tabla th{
   text-align:left;font-size:10px;font-weight:700;color:var(--text3);
   text-transform:uppercase;letter-spacing:.1em;
@@ -259,14 +260,23 @@ input,select{font-family:var(--sans);}
 .toast.error{border-color:#ef444455;}
 @keyframes sube{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 
-.cargando{display:grid;place-items:center;padding:40px;color:var(--text3);font-size:13px;}
-.vacio{padding:36px;text-align:center;color:var(--text3);font-size:13px;}
+.cargando{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--text3);font-size:13px;}
+.cargando::before{
+  content:'';width:20px;height:20px;border-radius:50%;
+  border:2px solid var(--border2);border-top-color:var(--amarillo);
+  animation:girar .7s linear infinite;
+}
+@keyframes girar{to{transform:rotate(360deg);}}
+.vacio{padding:36px;text-align:center;color:var(--text3);font-size:13px;line-height:1.6;}
 
 @media (max-width:720px){
   .selector-sistema{grid-template-columns:1fr;}
   .stats{grid-template-columns:1fr;}
   .topbar-nav{margin-left:0;}
   .topbar{flex-wrap:wrap;height:auto;padding:10px 14px;}
+  .detalle-head{flex-direction:column;align-items:stretch;}
+  .acciones{margin-left:0;flex-wrap:wrap;}
+  .menu-acciones-pop{left:0;right:auto;}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important;}
