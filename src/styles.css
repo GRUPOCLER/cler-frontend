@@ -233,6 +233,21 @@ input,select{font-family:var(--sans);}
 .btn-sec:hover{border-color:var(--border2);}
 .acciones{display:flex;gap:10px;margin-left:auto;}
 
+/* ── MENU DE ACCIONES (dropdown) ────────────────────────── */
+.menu-acciones-wrap{position:relative;}
+.menu-acciones-pop{
+  position:absolute;top:calc(100% + 6px);right:0;min-width:190px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;z-index:50;
+}
+.menu-acciones-item{
+  display:block;width:100%;text-align:left;padding:10px 14px;
+  background:transparent;border:none;color:var(--text);font-size:13px;
+  border-bottom:1px solid var(--border);
+}
+.menu-acciones-item:last-child{border-bottom:none;}
+.menu-acciones-item:hover{background:var(--bg3);}
+
 /* ── TOAST ──────────────────────────────────────────────── */
 .toast{
   position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
@@ -352,6 +367,8 @@ input,select{font-family:var(--sans);}
   margin-bottom:10px;overflow:hidden;
 }
 .tarima-card.cerrada{border-color:#10b98155;}
+.tarima-card.cerrada .tarima-head{opacity:.7;}
+.tarima-card.cerrada .tarima-head:hover{opacity:1;}
 .tarima-head{
   padding:10px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;
 }
