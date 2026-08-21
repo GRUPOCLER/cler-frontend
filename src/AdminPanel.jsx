@@ -4,7 +4,7 @@ import { Modal } from './App.jsx'
 
 const ROLES = [
   { valor: 'operador', nombre: 'Operador', desc: 'Opera los modulos, sin reimpresion ni reapertura' },
-  { valor: 'gerente',  nombre: 'Gerente',  desc: 'Autoriza reimpresiones, reabre entregas, agrega usuarios' },
+  { valor: 'gerente',  nombre: 'Gerente',  desc: 'Autoriza reimpresiones, reabre entregas, registra operadores' },
   { valor: 'admin',    nombre: 'Administrador', desc: 'Control total del sistema' },
 ]
 
@@ -16,6 +16,7 @@ function chipRol(rol) {
 // ── MODAL: CREAR / EDITAR USUARIO ────────────────────────
 function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
   const editando = !!usuarioActual
+  const soyGerente = miRol === 'gerente'
   const [usuario, setUsuario] = useState(usuarioActual?.usuario || '')
   const [email, setEmail] = useState(usuarioActual?.email || '')
   const [nombre, setNombre] = useState(usuarioActual?.nombre_display || '')
@@ -24,7 +25,7 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
   const [activo, setActivo] = useState(usuarioActual ? usuarioActual.activo : true)
   const [guardando, setGuardando] = useState(false)
 
-  const rolesDisponibles = miRol === 'admin' ? ROLES : ROLES.filter(r => r.valor !== 'admin')
+  const rolesDisponibles = miRol === 'admin' ? ROLES : ROLES.filter(r => r.valor === 'operador')
 
   const guardar = async () => {
     setGuardando(true)
@@ -47,7 +48,7 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-titulo">{editando ? 'Editar usuario' : 'Nuevo usuario'}</div>
+          <div className="modal-titulo">{editando ? 'Editar usuario' : soyGerente ? 'Registrar operador' : 'Nuevo usuario'}</div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -66,13 +67,17 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
           <input className="inp" style={{marginBottom:12}} type="password" value={password}
             onChange={e => setPassword(e.target.value)} placeholder={editando ? 'Dejar en blanco para no cambiar' : ''} />
 
-          <label className="dim-label">Rol</label>
-          <select className="inp" style={{marginBottom:6}} value={rol} onChange={e => setRol(e.target.value)}>
-            {rolesDisponibles.map(r => <option key={r.valor} value={r.valor}>{r.nombre}</option>)}
-          </select>
-          <div style={{fontSize:11,color:'var(--text3)',marginBottom:12}}>
-            {ROLES.find(r => r.valor === rol)?.desc}
-          </div>
+          {!soyGerente && (
+            <>
+              <label className="dim-label">Rol</label>
+              <select className="inp" style={{marginBottom:6}} value={rol} onChange={e => setRol(e.target.value)}>
+                {rolesDisponibles.map(r => <option key={r.valor} value={r.valor}>{r.nombre}</option>)}
+              </select>
+              <div style={{fontSize:11,color:'var(--text3)',marginBottom:12}}>
+                {ROLES.find(r => r.valor === rol)?.desc}
+              </div>
+            </>
+          )}
 
           {editando && (
             <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
@@ -92,125 +97,48 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
   )
 }
 
-// ── MODAL: RESOLVER SOLICITUD (aprobar/rechazar con comentario) ─
-function ModalResolver({ solicitud, accion, onClose, onConfirmar }) {
-  const [comentario, setComentario] = useState('')
-  const esAprobar = accion === 'aprobar'
-  return (
-    <Modal titulo={esAprobar ? 'Aprobar reimpresion' : 'Rechazar reimpresion'}
-      sub={`${solicitud.tipo} — ${solicitud.num_entrega || solicitud.referencia}`} onClose={onClose}
-      footer={<>
-        <button className="btn-sec" onClick={onClose}>Cancelar</button>
-        <button className={esAprobar ? 'btn-principal' : 'btn-mini'} onClick={() => onConfirmar(comentario)}>
-          {esAprobar ? 'Aprobar' : 'Rechazar'}
-        </button>
-      </>}>
-      <div style={{fontSize:12,color:'var(--text2)',marginBottom:10,background:'var(--bg3)',padding:10,borderRadius:6}}>
-        <b>Motivo del solicitante:</b><br/>{solicitud.motivo}
-      </div>
-      <label className="dim-label">Comentario {esAprobar ? '(opcional)' : ''}</label>
-      <textarea className="inp" rows={2} style={{resize:'vertical'}} value={comentario}
-        onChange={e => setComentario(e.target.value)} placeholder={esAprobar ? '' : 'Explica por que se rechaza'} />
-    </Modal>
-  )
-}
-
-// ── PANEL DE ADMINISTRACION ──────────────────────────────
+// ── PANEL DE ADMINISTRACION (solo Admin: usuarios + bitacora) ───
 export default function AdminPanel({ toast, miRol }) {
   const [tab, setTab] = useState('usuarios')
   const [usuarios, setUsuarios] = useState(null)
   const [logs, setLogs] = useState(null)
-  const [solicitudes, setSolicitudes] = useState(null)
-  const [modalUsuario, setModalUsuario] = useState(undefined) // undefined=cerrado, null=nuevo, obj=editar
-  const [modalResolver, setModalResolver] = useState(null) // { solicitud, accion }
+  const [modalUsuario, setModalUsuario] = useState(undefined)
 
-  const cargarUsuarios     = () => api.listarUsuarios().then(setUsuarios).catch(e => toast(e.message, 'error'))
-  const cargarLogs         = () => api.verLogs().then(setLogs).catch(e => toast(e.message, 'error'))
-  const cargarSolicitudes  = () => api.listarSolicitudes().then(setSolicitudes).catch(e => toast(e.message, 'error'))
+  const cargarUsuarios = () => api.listarUsuarios().then(setUsuarios).catch(e => toast(e.message, 'error'))
+  const cargarLogs     = () => api.verLogs().then(setLogs).catch(e => toast(e.message, 'error'))
 
   useEffect(() => {
     if (tab === 'usuarios' && !usuarios) cargarUsuarios()
     if (tab === 'logs' && !logs) cargarLogs()
-    if (tab === 'reimpresiones') cargarSolicitudes()
   }, [tab])
 
-  const resolver = async (comentario) => {
-    try {
-      const { solicitud, accion } = modalResolver
-      if (accion === 'aprobar') await api.aprobarSolicitud(solicitud.id, comentario || null)
-      else await api.rechazarSolicitud(solicitud.id, comentario || null)
-      toast(accion === 'aprobar' ? 'Solicitud aprobada' : 'Solicitud rechazada', 'ok')
-      setModalResolver(null); cargarSolicitudes()
-    } catch (e) { toast(e.message, 'error') }
+  // Un Gerente solo puede registrar operadores, sin ver listas
+  if (miRol === 'gerente') {
+    return (
+      <div className="contenedor">
+        <div className="titulo-pag">Registrar operador</div>
+        <div className="sub-pag">Como Gerente puedes dar de alta cuentas de Operador</div>
+        <div className="panel">
+          <button className="btn-principal" onClick={() => setModalUsuario(null)}>+ Registrar operador</button>
+        </div>
+        {modalUsuario !== undefined && (
+          <ModalUsuario usuarioActual={modalUsuario} miRol={miRol} toast={toast}
+            onClose={() => setModalUsuario(undefined)}
+            onGuardado={() => setModalUsuario(undefined)} />
+        )}
+      </div>
+    )
   }
-
-  const pendientes = (solicitudes || []).filter(s => s.estatus === 'pendiente')
-  const resueltas  = (solicitudes || []).filter(s => s.estatus !== 'pendiente')
 
   return (
     <div className="contenedor">
       <div className="titulo-pag">Administracion</div>
-      <div className="sub-pag">Usuarios, roles, reimpresiones y bitacora de acciones</div>
+      <div className="sub-pag">Usuarios, roles y bitacora de acciones</div>
 
       <div className="topbar-nav" style={{marginBottom:20}}>
         <button className={'nav-btn' + (tab === 'usuarios' ? ' activo' : '')} onClick={() => setTab('usuarios')}>Usuarios</button>
-        <button className={'nav-btn' + (tab === 'reimpresiones' ? ' activo' : '')} onClick={() => setTab('reimpresiones')}>
-          Reimpresiones{pendientes.length > 0 && <span className="chip chip-warn" style={{marginLeft:6}}>{pendientes.length}</span>}
-        </button>
         <button className={'nav-btn' + (tab === 'logs' ? ' activo' : '')} onClick={() => setTab('logs')}>Bitacora</button>
       </div>
-
-      {tab === 'reimpresiones' && (
-        <>
-          <div className="panel">
-            <div className="panel-titulo">Solicitudes pendientes<span className="chip chip-warn">{pendientes.length}</span></div>
-            {!solicitudes ? <div className="cargando">Cargando...</div>
-              : pendientes.length === 0 ? <div className="vacio">Sin solicitudes pendientes.</div>
-              : (
-              <table className="tabla">
-                <thead><tr><th>Fecha</th><th>Documento</th><th>Folio</th><th>Solicito</th><th>Motivo</th><th></th></tr></thead>
-                <tbody>
-                  {pendientes.map(s => (
-                    <tr key={s.id}>
-                      <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{(s.fecha_solicitud || '').substring(0,16)}</td>
-                      <td><span className="chip chip-warn">{s.tipo}</span></td>
-                      <td style={{fontFamily:'var(--mono)',fontWeight:700}}>{s.num_entrega || s.referencia}</td>
-                      <td style={{fontFamily:'var(--mono)'}}>{s.solicitado_por}</td>
-                      <td style={{color:'var(--text2)',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.motivo}</td>
-                      <td style={{display:'flex',gap:6}}>
-                        <button className="btn-mini btn-mini-exito" onClick={() => setModalResolver({ solicitud: s, accion: 'aprobar' })}>Aprobar</button>
-                        <button className="btn-mini" onClick={() => setModalResolver({ solicitud: s, accion: 'rechazar' })}>Rechazar</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-          <div className="panel">
-            <div className="panel-titulo">Historial reciente</div>
-            {!solicitudes ? <div className="cargando">Cargando...</div>
-              : resueltas.length === 0 ? <div className="vacio">Sin historial.</div>
-              : (
-              <table className="tabla">
-                <thead><tr><th>Fecha</th><th>Documento</th><th>Folio</th><th>Solicito</th><th>Estatus</th><th>Autorizo</th></tr></thead>
-                <tbody>
-                  {resueltas.slice(0,30).map(s => (
-                    <tr key={s.id}>
-                      <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{(s.fecha_resolucion || s.fecha_solicitud || '').substring(0,16)}</td>
-                      <td><span className="chip chip-ok">{s.tipo}</span></td>
-                      <td style={{fontFamily:'var(--mono)',fontWeight:700}}>{s.num_entrega || s.referencia}</td>
-                      <td style={{fontFamily:'var(--mono)'}}>{s.solicitado_por}</td>
-                      <td><span className={s.estatus === 'aprobada' || s.estatus === 'usada' ? 'chip chip-ok' : 'chip chip-warn'}>{s.estatus}</span></td>
-                      <td style={{fontFamily:'var(--mono)',fontSize:12}}>{s.autorizado_por || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
-      )}
 
       {tab === 'usuarios' && (
         <div className="panel">
@@ -271,10 +199,6 @@ export default function AdminPanel({ toast, miRol }) {
         <ModalUsuario usuarioActual={modalUsuario} miRol={miRol} toast={toast}
           onClose={() => setModalUsuario(undefined)}
           onGuardado={() => { setModalUsuario(undefined); cargarUsuarios() }} />
-      )}
-      {modalResolver && (
-        <ModalResolver solicitud={modalResolver.solicitud} accion={modalResolver.accion}
-          onClose={() => setModalResolver(null)} onConfirmar={resolver} />
       )}
     </div>
   )
