@@ -7,31 +7,39 @@ import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
-// ── HELPER: imprimir con reintento pidiendo motivo si hace falta ─
-async function imprimirConMotivo(fnMarcar, toast) {
-  try {
-    await fnMarcar(null)
-    window.print()
-  } catch (e) {
-    if (/motivo/i.test(e.message)) {
-      const motivo = window.prompt(e.message + '\n\nEscribe el motivo:')
-      if (!motivo || !motivo.trim()) { toast('Reimpresion cancelada: se requiere un motivo', 'error'); return }
-      try {
-        await fnMarcar(motivo.trim())
-        window.print()
-      } catch (e2) {
-        if (/[Ss]olicitud enviada/.test(e2.message)) {
-          toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
-        } else {
-          toast(e2.message, 'error')
-        }
-      }
-    } else if (/[Ss]olicitud/.test(e.message)) {
-      toast(e.message, 'error')
-    } else {
-      toast(e.message, 'error')
-    }
+// ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
+function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const confirmar = async () => {
+    setEnviando(true)
+    await onConfirmar(motivo.trim())
+    setEnviando(false)
   }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-titulo">Justificar reimpresion</div>
+            <div className="modal-sub">{mensaje}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <label className="dim-label">Motivo de la reimpresion</label>
+          <textarea className="inp" rows={3} style={{resize:'vertical'}} value={motivo}
+            onChange={e => setMotivo(e.target.value)} autoFocus />
+        </div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Cancelar</button>
+          <button className="btn-principal" disabled={!motivo.trim() || enviando} onClick={confirmar}>
+            {enviando ? 'Enviando...' : 'Enviar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function useToast() {
@@ -834,6 +842,7 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
 // ── VISTA DE ETIQUETAS (imprimible) ──────────────────────
 function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
   const [datos, setDatos] = useState(null)
+  const [modalMotivo, setModalMotivo] = useState(null) // { fnMarcar, mensaje } | null
 
   useEffect(() => {
     const carga = idTarima
@@ -842,12 +851,29 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
     carga.then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
   }, [idEntrega, idTarima])
 
-  const imprimir = () => imprimirConMotivo(
-    idTarima
-      ? (motivo) => api.marcarImpresaTarima(idEntrega, idTarima, motivo)
-      : (motivo) => Promise.all(datos.map(d => api.marcarImpresaTarima(idEntrega, d.id_tarima, motivo))),
-    toast
-  )
+  const fnMarcar = (motivo) => idTarima
+    ? api.marcarImpresaTarima(idEntrega, idTarima, motivo)
+    : Promise.all(datos.map(d => api.marcarImpresaTarima(idEntrega, d.id_tarima, motivo)))
+
+  const imprimir = async () => {
+    try { await fnMarcar(null); window.print() }
+    catch (e) {
+      if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
+      else toast(e.message, 'error')
+    }
+  }
+
+  const confirmarMotivo = async (motivo) => {
+    try {
+      await fnMarcar(motivo)
+      setModalMotivo(null)
+      window.print()
+    } catch (e2) {
+      setModalMotivo(null)
+      if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e2.message, 'error')
+    }
+  }
 
   if (!datos) return <div className="cargando">Generando etiqueta(s)...</div>
 
@@ -862,6 +888,10 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
         </div>
       </div>
       <Etiquetas datos={datos} />
+      {modalMotivo && (
+        <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
+          onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
+      )}
     </div>
   )
 }
@@ -869,6 +899,7 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
 // ── VISTA DE ETIQUETAS SUELTAS (por SKU, carga suelta) ───
 function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
   const [datos, setDatos] = useState(null)
+  const [modalMotivo, setModalMotivo] = useState(null)
 
   useEffect(() => {
     api.obtenerEtiquetasSueltas(idEntrega).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
@@ -876,8 +907,27 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
 
   if (!datos) return <div className="cargando">Generando etiquetas...</div>
 
-  const imprimir = () => imprimirConMotivo((motivo) => api.marcarImpresaSueltas(idEntrega, motivo), toast)
   const yaImpresa = datos.some(d => (d.impresa_veces || 0) > 0)
+
+  const imprimir = async () => {
+    try { await api.marcarImpresaSueltas(idEntrega, null); window.print() }
+    catch (e) {
+      if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
+      else toast(e.message, 'error')
+    }
+  }
+
+  const confirmarMotivo = async (motivo) => {
+    try {
+      await api.marcarImpresaSueltas(idEntrega, motivo)
+      setModalMotivo(null)
+      window.print()
+    } catch (e2) {
+      setModalMotivo(null)
+      if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e2.message, 'error')
+    }
+  }
 
   return (
     <div>
@@ -888,6 +938,10 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
         </div>
       </div>
       <EtiquetasSueltas datos={datos} />
+      {modalMotivo && (
+        <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
+          onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
+      )}
     </div>
   )
 }
@@ -895,6 +949,7 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
 // ── VISTA DE LISTA DE EMPAQUE (imprimible) ────────────────
 function VistaPacking({ idEntrega, volver, toast }) {
   const [datos, setDatos] = useState(null)
+  const [modalMotivo, setModalMotivo] = useState(null)
 
   useEffect(() => {
     api.obtenerPacking(idEntrega).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
@@ -902,8 +957,27 @@ function VistaPacking({ idEntrega, volver, toast }) {
 
   if (!datos) return <div className="cargando">Generando lista de empaque...</div>
 
-  const imprimir = () => imprimirConMotivo((motivo) => api.marcarImpresoPacking(idEntrega, motivo), toast)
   const yaImpresa = (datos.entrega?.packing_impreso_veces || 0) > 0
+
+  const imprimir = async () => {
+    try { await api.marcarImpresoPacking(idEntrega, null); window.print() }
+    catch (e) {
+      if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
+      else toast(e.message, 'error')
+    }
+  }
+
+  const confirmarMotivo = async (motivo) => {
+    try {
+      await api.marcarImpresoPacking(idEntrega, motivo)
+      setModalMotivo(null)
+      window.print()
+    } catch (e2) {
+      setModalMotivo(null)
+      if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e2.message, 'error')
+    }
+  }
 
   return (
     <div>
@@ -914,6 +988,10 @@ function VistaPacking({ idEntrega, volver, toast }) {
         </div>
       </div>
       <ListaEmpaque datos={datos} />
+      {modalMotivo && (
+        <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
+          onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
+      )}
     </div>
   )
 }
