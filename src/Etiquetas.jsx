@@ -86,7 +86,7 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
           <thead>
             <tr>
               <th style={{ textAlign: 'left' }}>Clave</th>
-              <th style={{ textAlign: 'left' }}>Descripcion</th>
+              <th style={{ textAlign: 'left' }}>Descripción</th>
               <th style={{ textAlign: 'right' }}>Cant</th>
             </tr>
           </thead>
