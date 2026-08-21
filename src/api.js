@@ -146,6 +146,8 @@ export const aprobarSolicitud = (id, comentario = null) =>
 export const rechazarSolicitud = (id, comentario = null) =>
   req(`/api/reimpresiones/${id}/rechazar`, { method: 'POST', body: JSON.stringify({ comentario }) })
 
+export const contarPendientes = () => req('/api/reimpresiones/pendientes-count')
+
 export const obtenerEtiqueta = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/etiqueta`)
 
