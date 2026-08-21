@@ -153,7 +153,7 @@ export default function AdminPanel({ toast, miRol }) {
             : usuarios.length === 0 ? <div className="vacio">Sin usuarios.</div>
             : (
             <table className="tabla">
-              <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estatus</th><th>Ultimo acceso</th><th></th></tr></thead>
+              <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estatus</th><th>Último acceso</th><th></th></tr></thead>
               <tbody>
                 {usuarios.map(u => (
                   <tr key={u.usuario} onClick={() => setModalUsuario(u)}>
