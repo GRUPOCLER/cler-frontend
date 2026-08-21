@@ -9,6 +9,36 @@ import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
 // ── MODAL: CONFIRMACION GENERICA ─────────────────────────
+// ── MENU DE ACCIONES SECUNDARIAS (dropdown) ──────────────
+function MenuAcciones({ acciones }) {
+  const [abierto, setAbierto] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setAbierto(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  if (!acciones.length) return null
+
+  return (
+    <div className="menu-acciones-wrap" ref={ref}>
+      <button className="btn-sec" onClick={() => setAbierto(a => !a)}>Mas acciones ⌄</button>
+      {abierto && (
+        <div className="menu-acciones-pop">
+          {acciones.map((a, i) => (
+            <button key={i} className="menu-acciones-item"
+              onClick={() => { setAbierto(false); a.onClick() }}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro, onClose, onConfirmar }) {
   return (
     <Modal titulo={titulo} onClose={onClose}
@@ -579,10 +609,10 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
           tarimas:            f.tarimas,
         }
         setEnt(combinado)
-        setAbiertas(prev => new Set([...prev, ...(f.tarimas || []).map(t => t.id_tarima)]))
+        setAbiertas(prev => new Set([...prev, ...(f.tarimas || []).filter(t => t.estatus === 'abierta').map(t => t.id_tarima)]))
       } else {
         setEnt(d)
-        setAbiertas(prev => new Set([...prev, ...(d.tarimas || []).map(t => t.id_tarima)]))
+        setAbiertas(prev => new Set([...prev, ...(d.tarimas || []).filter(t => t.estatus === 'abierta').map(t => t.id_tarima)]))
       }
     } catch (e) { toast(e.message, 'error') }
   }
@@ -709,38 +739,37 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
     <div className="contenedor">
       <div className="detalle-head">
         <div>
-          <div className="detalle-folio">{ent.num_entrega}</div>
-          <div className="detalle-cliente">
-            {ent.nombre_cliente || 'Sin cliente'}
-            <button className="btn-quitar-mini" style={{marginLeft:8}} onClick={() => setModalCliente(true)}>Editar</button>
-          </div>
-          {ent.direccion && <div className="detalle-dir">{ent.direccion}</div>}
-          <div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <span className="detalle-folio">{ent.num_entrega}</span>
             <span className={'badge-sistema badge-' + ent.sistema}>{ent.sistema}</span>
             <span className={'badge-estatus badge-' + ent.estatus}>{ent.estatus}</span>
             {ent.orden && <span className="chip chip-warn">{ent.orden}</span>}
+          </div>
+          <div style={{marginTop:10,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span className="detalle-cliente">{ent.nombre_cliente || 'Sin cliente'}</span>
+            <button className="btn-quitar-mini" onClick={() => setModalCliente(true)}>Editar</button>
             {esRaiker && (
               <span className="chip chip-raiker" style={{cursor:'pointer'}} onClick={() => setModalSucursal(true)}>
                 {ent.sucursal ? 'Suc: ' + ent.sucursal : 'Elegir sucursal ✎'}
               </span>
             )}
           </div>
+          {ent.direccion && <div className="detalle-dir" style={{marginTop:2}}>{ent.direccion}</div>}
         </div>
         <div className="acciones">
           <button className="btn-sec" onClick={volver}>Volver</button>
-          {productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX') &&
-            <button className="btn-sec" onClick={() => verEtiquetasSueltas(id)}>Imprimir etiquetas sueltas</button>}
-          {(tarimas.some(t => t.estatus === 'cerrada') || ent.estatus === 'completada') && (
-            <>
-              {tarimas.some(t => t.estatus === 'cerrada') &&
-                <button className="btn-sec" onClick={() => verEtiquetas(id)}>Ver etiquetas de tarima</button>}
-              <button className="btn-sec" onClick={() => verPacking(id)}>Lista de empaque</button>
-            </>
-          )}
           {ent.estatus === 'pendiente' &&
             <button className="btn-principal" onClick={completar}>Completar entrega</button>}
-          {ent.estatus === 'completada' &&
-            <button className="btn-sec" onClick={reabrirEnt}>Reabrir entrega</button>}
+          <MenuAcciones acciones={[
+            ...(productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX')
+              ? [{ label: 'Imprimir etiquetas sueltas', onClick: () => verEtiquetasSueltas(id) }] : []),
+            ...(tarimas.some(t => t.estatus === 'cerrada')
+              ? [{ label: 'Ver etiquetas de tarima', onClick: () => verEtiquetas(id) }] : []),
+            ...(tarimas.some(t => t.estatus === 'cerrada') || ent.estatus === 'completada'
+              ? [{ label: 'Lista de empaque', onClick: () => verPacking(id) }] : []),
+            ...(ent.estatus === 'completada'
+              ? [{ label: 'Reabrir entrega', onClick: reabrirEnt }] : []),
+          ]} />
         </div>
       </div>
 
@@ -757,7 +786,7 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
                   <span></span><span>Clave</span><span>Descripcion</span><span style={{textAlign:'right'}}>Total</span>
                   <span style={{textAlign:'right'}}>Asig.</span><span style={{textAlign:'right'}}>Pend.</span><span></span>
                 </div>
-                {productos.map(p => {
+                {[...productos].sort((a, b) => (a.cantidad_pendiente === 0 ? 1 : 0) - (b.cantidad_pendiente === 0 ? 1 : 0)).map(p => {
                   const done = p.cantidad_pendiente === 0
                   const esExt = p.id_producto.includes('-EXT')
                   return (
@@ -796,7 +825,7 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
             </button>
             {tarimas.length === 0
               ? <div className="tarima-vacia">Sin tarimas todavia.</div>
-              : tarimas.map(t => {
+              : [...tarimas].sort((a, b) => (a.estatus === 'cerrada' ? 1 : 0) - (b.estatus === 'cerrada' ? 1 : 0)).map(t => {
                 const abierta = abiertas.has(t.id_tarima)
                 const cerrada = t.estatus === 'cerrada'
                 const detalle = t.productos || []
