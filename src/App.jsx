@@ -6,6 +6,25 @@ import ListaEmpaque from './ListaEmpaque.jsx'
 import AdminPanel from './AdminPanel.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
+// ── HELPER: imprimir con reintento pidiendo motivo si hace falta ─
+async function imprimirConMotivo(fnMarcar, toast) {
+  try {
+    await fnMarcar(null)
+    window.print()
+  } catch (e) {
+    if (/motivo/i.test(e.message)) {
+      const motivo = window.prompt('Este documento ya fue impreso antes.\nEscribe el motivo de la reimpresion:')
+      if (!motivo || !motivo.trim()) { toast('Reimpresion cancelada: se requiere un motivo', 'error'); return }
+      try {
+        await fnMarcar(motivo.trim())
+        window.print()
+      } catch (e2) { toast(e2.message, 'error') }
+    } else {
+      toast(e.message, 'error')
+    }
+  }
+}
+
 function useToast() {
   const [msg, setMsg] = useState(null)
   const show = (texto, tipo = 'ok') => {
@@ -42,7 +61,7 @@ function Login({ onOk }) {
         <div className="login-marca">GRUPO<span>CLER</span></div>
         <div className="login-sub">Sistema operativo de almacen</div>
         <form className="login-form" onSubmit={entrar}>
-          <input className="inp" placeholder="Usuario" value={usuario}
+          <input className="inp" placeholder="Usuario o correo" value={usuario}
             onChange={e => setUsuario(e.target.value)} autoFocus />
           <input className="inp" type="password" placeholder="Contrasena"
             value={password} onChange={e => setPassword(e.target.value)} />
@@ -814,16 +833,12 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
     carga.then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
   }, [idEntrega, idTarima])
 
-  const imprimir = async () => {
-    try {
-      if (idTarima) {
-        await api.marcarImpresaTarima(idEntrega, idTarima)
-      } else {
-        for (const d of datos) await api.marcarImpresaTarima(idEntrega, d.id_tarima)
-      }
-      window.print()
-    } catch (e) { toast(e.message, 'error') }
-  }
+  const imprimir = () => imprimirConMotivo(
+    idTarima
+      ? (motivo) => api.marcarImpresaTarima(idEntrega, idTarima, motivo)
+      : (motivo) => Promise.all(datos.map(d => api.marcarImpresaTarima(idEntrega, d.id_tarima, motivo))),
+    toast
+  )
 
   if (!datos) return <div className="cargando">Generando etiqueta(s)...</div>
 
@@ -850,10 +865,7 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
 
   if (!datos) return <div className="cargando">Generando etiquetas...</div>
 
-  const imprimir = async () => {
-    try { await api.marcarImpresaSueltas(idEntrega); window.print() }
-    catch (e) { toast(e.message, 'error') }
-  }
+  const imprimir = () => imprimirConMotivo((motivo) => api.marcarImpresaSueltas(idEntrega, motivo), toast)
 
   return (
     <div>
@@ -878,10 +890,7 @@ function VistaPacking({ idEntrega, volver, toast }) {
 
   if (!datos) return <div className="cargando">Generando lista de empaque...</div>
 
-  const imprimir = async () => {
-    try { await api.marcarImpresoPacking(idEntrega); window.print() }
-    catch (e) { toast(e.message, 'error') }
-  }
+  const imprimir = () => imprimirConMotivo((motivo) => api.marcarImpresoPacking(idEntrega, motivo), toast)
 
   return (
     <div>
