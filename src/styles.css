@@ -340,7 +340,7 @@ input,select{font-family:var(--sans);}
 .fila-prod-check:last-child{border-bottom:none;}
 .fila-prod-check:hover{background:var(--bg3);}
 .fila-prod-check input{width:15px;height:15px;accent-color:var(--amarillo);cursor:pointer;}
-.fila-prod-check .fp-clave{font-family:var(--mono);font-weight:700;color:var(--amarillo);min-width:100px;}
+.fila-prod-check .fp-clave{font-family:var(--mono);font-weight:700;color:var(--text2);min-width:100px;}
 .fila-prod-check .fp-desc{flex:1;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fila-prod-check .fp-cant{font-family:var(--mono);font-weight:700;min-width:44px;text-align:right;}
 .fila-prod-check.en-tarima{opacity:.5;}
@@ -364,7 +364,7 @@ input,select{font-family:var(--sans);}
   border-bottom:1px solid var(--border);font-size:12px;
 }
 .tarima-prod-row:last-child{border-bottom:none;}
-.tarima-prod-row .tp-clave{font-family:var(--mono);color:var(--amarillo);min-width:80px;font-size:11px;}
+.tarima-prod-row .tp-clave{font-family:var(--mono);color:var(--text2);min-width:80px;font-size:11px;}
 .tarima-prod-row .tp-desc{flex:1;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;}
 .tarima-prod-row .tp-cant{font-family:var(--mono);font-size:11px;}
 .btn-quitar-mini{
