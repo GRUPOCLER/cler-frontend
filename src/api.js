@@ -134,6 +134,18 @@ export const editarUsuario = (usuario, body) =>
 
 export const verLogs = () => req('/api/admin/logs')
 
+// ── SOLICITUDES DE REIMPRESION ───────────────────────────
+export const listarSolicitudes = (estatus = null) =>
+  req('/api/reimpresiones/' + (estatus ? '?estatus=' + estatus : ''))
+
+export const misSolicitudes = () => req('/api/reimpresiones/mias')
+
+export const aprobarSolicitud = (id, comentario = null) =>
+  req(`/api/reimpresiones/${id}/aprobar`, { method: 'POST', body: JSON.stringify({ comentario }) })
+
+export const rechazarSolicitud = (id, comentario = null) =>
+  req(`/api/reimpresiones/${id}/rechazar`, { method: 'POST', body: JSON.stringify({ comentario }) })
+
 export const obtenerEtiqueta = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/etiqueta`)
 
