@@ -4,11 +4,11 @@
    ============================================================ */
 
 :root{
-  --bg:#0a1826;         /* fondo base — azul marino profundo de marca */
-  --bg2:#0f2236;        /* paneles */
-  --bg3:#152d45;        /* inputs, filas */
-  --border:#1f3a54;
-  --border2:#2c4a68;
+  --bg:#050d16;         /* fondo base — azul marino profundo de marca, mas oscuro */
+  --bg2:#091724;        /* paneles */
+  --bg3:#0e2032;        /* inputs, filas */
+  --border:#16283a;
+  --border2:#213a52;
   --text:#eef3f8;
   --text2:#9db2c6;
   --text3:#5c7893;
