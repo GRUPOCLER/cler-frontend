@@ -518,7 +518,7 @@ function ModalCliente({ nombre, direccion, onClose, onConfirmar }) {
       </>}>
       <label className="dim-label">Nombre del cliente</label>
       <input className="inp" style={{marginBottom:12}} value={n} onChange={e => setN(e.target.value)} autoFocus />
-      <label className="dim-label">Direccion</label>
+      <label className="dim-label">Dirección</label>
       <textarea className="inp" rows={3} style={{resize:'vertical'}} value={d} onChange={e => setD(e.target.value)} />
     </Modal>
   )
@@ -783,7 +783,7 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
             {productos.length === 0 ? <div className="vacio">Sin productos.</div> : (
               <>
                 <div style={{display:'grid',gridTemplateColumns:'20px 1fr 2fr 50px 60px 60px 50px',gap:8,padding:'6px 12px',fontSize:10,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em'}}>
-                  <span></span><span>Clave</span><span>Descripcion</span><span style={{textAlign:'right'}}>Total</span>
+                  <span></span><span>Clave</span><span>Descripción</span><span style={{textAlign:'right'}}>Total</span>
                   <span style={{textAlign:'right'}}>Asig.</span><span style={{textAlign:'right'}}>Pend.</span><span></span>
                 </div>
                 {[...productos].sort((a, b) => (a.cantidad_pendiente === 0 ? 1 : 0) - (b.cantidad_pendiente === 0 ? 1 : 0)).map(p => {
