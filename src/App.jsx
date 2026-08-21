@@ -108,24 +108,19 @@ function Login({ onOk }) {
 }
 
 // ── DASHBOARD ────────────────────────────────────────────
-const COLORES_FUSION = ['#a855f7', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16', '#f43f5e']
+// Un solo color para toda fusion — la adyacencia fisica de filas ya distingue
+// grupos entre si; el color solo indica "esta fusionada", no "cual grupo"
+const COLOR_FUSION = '#4A9FE0'
 
 function agruparPorFusion(entregas) {
-  const coloresPorGrupo = {}
-  let siguienteColor = 0
   const emitidos = new Set()
   const resultado = []
 
   entregas.forEach(e => {
     if (emitidos.has(e.id_entrega)) return
     if (e.grupo_fusion) {
-      if (!(e.grupo_fusion in coloresPorGrupo)) {
-        coloresPorGrupo[e.grupo_fusion] = COLORES_FUSION[siguienteColor % COLORES_FUSION.length]
-        siguienteColor++
-      }
-      const color = coloresPorGrupo[e.grupo_fusion]
       const delGrupo = entregas.filter(x => x.grupo_fusion === e.grupo_fusion)
-      delGrupo.forEach(x => { emitidos.add(x.id_entrega); resultado.push({ ...x, colorFusion: color }) })
+      delGrupo.forEach(x => { emitidos.add(x.id_entrega); resultado.push({ ...x, colorFusion: COLOR_FUSION }) })
     } else {
       emitidos.add(e.id_entrega)
       resultado.push(e)
@@ -178,12 +173,18 @@ function Dashboard({ irDetalle, onFusionar }) {
               <th>Folio</th><th>Sistema</th><th>Cliente</th><th>Fecha</th><th>Estatus</th>
             </tr></thead>
             <tbody>
-              {entregas.map(e => (
+              {entregas.map((e, i) => {
+                const anterior = entregas[i - 1]
+                const nuevoGrupo = e.grupo_fusion && anterior?.grupo_fusion && anterior.grupo_fusion !== e.grupo_fusion
+                return (
                 <tr key={e.id_entrega} onClick={() => irDetalle(e.id_entrega)}
-                  style={e.colorFusion ? {
-                    background: e.colorFusion + '14',
-                    borderLeft: '3px solid ' + e.colorFusion
-                  } : undefined}>
+                  style={{
+                    ...(e.colorFusion ? {
+                      background: e.colorFusion + '14',
+                      borderLeft: '3px solid ' + e.colorFusion
+                    } : {}),
+                    ...(nuevoGrupo ? { borderTop: '2px solid var(--border2)' } : {})
+                  }}>
                   <td>
                     <span style={{fontFamily:'var(--mono)',fontWeight:700}}>{e.num_entrega}</span>
                     {e.es_fusion && (
@@ -199,7 +200,8 @@ function Dashboard({ irDetalle, onFusionar }) {
                     {(e.fecha_creacion || '').substring(0, 10)}</td>
                   <td><span className={'badge-estatus badge-' + e.estatus}>{e.estatus}</span></td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}
