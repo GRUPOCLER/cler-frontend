@@ -16,6 +16,7 @@ function chipRol(rol) {
 function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
   const editando = !!usuarioActual
   const [usuario, setUsuario] = useState(usuarioActual?.usuario || '')
+  const [email, setEmail] = useState(usuarioActual?.email || '')
   const [nombre, setNombre] = useState(usuarioActual?.nombre_display || '')
   const [password, setPassword] = useState('')
   const [rol, setRol] = useState(usuarioActual?.rol || 'operador')
@@ -28,12 +29,12 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
     setGuardando(true)
     try {
       if (editando) {
-        const body = { nombre_display: nombre, rol, activo }
+        const body = { nombre_display: nombre, rol, activo, email }
         if (password) body.password = password
         await api.editarUsuario(usuario, body)
         toast('Usuario actualizado', 'ok')
       } else {
-        await api.crearUsuario({ usuario, password, nombre_display: nombre, rol })
+        await api.crearUsuario({ usuario, password, nombre_display: nombre, rol, email })
         toast('Usuario creado', 'ok')
       }
       onGuardado()
@@ -52,6 +53,10 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
           <label className="dim-label">Usuario</label>
           <input className="inp" style={{marginBottom:12}} value={usuario}
             disabled={editando} onChange={e => setUsuario(e.target.value)} />
+
+          <label className="dim-label">Correo electronico</label>
+          <input className="inp" style={{marginBottom:12}} type="email" value={email}
+            onChange={e => setEmail(e.target.value)} placeholder="nombre@grupocler.com.mx" />
 
           <label className="dim-label">Nombre para mostrar</label>
           <input className="inp" style={{marginBottom:12}} value={nombre} onChange={e => setNombre(e.target.value)} />
