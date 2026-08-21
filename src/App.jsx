@@ -4,6 +4,7 @@ import Etiquetas from './Etiquetas.jsx'
 import EtiquetasSueltas from './EtiquetasSueltas.jsx'
 import ListaEmpaque from './ListaEmpaque.jsx'
 import AdminPanel from './AdminPanel.jsx'
+import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── HELPER: imprimir con reintento pidiendo motivo si hace falta ─
@@ -924,7 +925,18 @@ export default function App() {
   const [idDetalle, setIdDetalle] = useState(null)
   const [etiquetaTarima, setEtiquetaTarima] = useState(null)
   const [modalFusion, setModalFusion] = useState(false)
+  const [pendientesReimpresion, setPendientesReimpresion] = useState(0)
   const [toast, Toast] = useToast()
+
+  useEffect(() => {
+    if (!logueado) return
+    const user0 = api.getUser()
+    if (user0?.rol !== 'admin' && user0?.rol !== 'gerente') return
+    const check = () => api.contarPendientes().then(r => setPendientesReimpresion(r.pendientes)).catch(() => {})
+    check()
+    const intervalo = setInterval(check, 15000)
+    return () => clearInterval(intervalo)
+  }, [logueado])
 
   if (!logueado) return <Login onOk={() => setLogueado(true)} />
 
@@ -963,8 +975,17 @@ export default function App() {
               onClick={() => setVista('nueva')}>Nueva entrega</button>
             <button className="nav-btn" onClick={() => setModalFusion(true)}>Fusionar entregas</button>
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
+              <button className={'nav-btn' + (vista === 'reimpresiones' ? ' activo' : '')}
+                onClick={() => setVista('reimpresiones')}>
+                Reimpresiones
+                {pendientesReimpresion > 0 && <span className="chip chip-warn" style={{marginLeft:6}}>{pendientesReimpresion}</span>}
+              </button>
+            )}
+            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
               <button className={'nav-btn' + (vista === 'admin' ? ' activo' : '')}
-                onClick={() => setVista('admin')}>Administracion</button>
+                onClick={() => setVista('admin')}>
+                {user?.rol === 'gerente' ? 'Registrar operador' : 'Administracion'}
+              </button>
             )}
           </nav>
           <div className="topbar-user">
@@ -991,6 +1012,7 @@ export default function App() {
           <VistaPacking idEntrega={idDetalle}
             volver={() => setVista('detalle')} toast={toast} />}
         {vista === 'admin' && <AdminPanel toast={toast} miRol={user?.rol} />}
+        {vista === 'reimpresiones' && <ReimpresionesPanel toast={toast} />}
       </div>
       {modalFusion && (
         <ModalFusion onClose={() => setModalFusion(false)} onConfirmar={confirmarFusion} />
