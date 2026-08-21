@@ -8,6 +8,21 @@ import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
+// ── MODAL: CONFIRMACION GENERICA ─────────────────────────
+function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro, onClose, onConfirmar }) {
+  return (
+    <Modal titulo={titulo} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className={peligro ? 'btn-mini' : 'btn-principal'}
+          style={peligro ? {background:'var(--rojo)',color:'#fff'} : undefined}
+          onClick={onConfirmar}>{textoConfirmar}</button>
+      </>}>
+      <p style={{fontSize:13,color:'var(--text2)',lineHeight:1.5}}>{mensaje}</p>
+    </Modal>
+  )
+}
+
 function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -533,6 +548,7 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
   const [modalAsignarPre, setModalAsignarPre] = useState(undefined) // undefined=cerrado, null|id_tarima=abierto
   const [modalCerrar, setModalCerrar] = useState(null)
   const [modalExt, setModalExt] = useState(null)
+  const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
   const [modalSucursal, setModalSucursal] = useState(false)
   const [modalCliente, setModalCliente] = useState(false)
   const [abiertas, setAbiertas] = useState(new Set())
@@ -618,16 +634,27 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const quitarUnDetalle = async (idDetalle) => {
-    if (!confirm('¿Quitar y devolver stock a pendiente?')) return
-    try { await api.quitarDetalle(id, idDetalle); toast('Devuelto', 'ok'); cargar() }
-    catch (e) { toast(e.message, 'error') }
+  const quitarUnDetalle = (idDetalle) => {
+    setModalConfirmar({
+      titulo: 'Quitar producto',
+      mensaje: '¿Quitar este producto de la tarima? La cantidad vuelve a pendiente.',
+      accion: async () => {
+        try { await api.quitarDetalle(id, idDetalle); toast('Devuelto', 'ok'); cargar() }
+        catch (e) { toast(e.message, 'error') }
+      }
+    })
   }
 
-  const eliminarUnaTarima = async (idTarima) => {
-    if (!confirm('¿Eliminar esta tarima? Sus cantidades vuelven a pendiente.')) return
-    try { await api.eliminarTarima(id, idTarima); toast('Tarima eliminada', 'ok'); cargar() }
-    catch (e) { toast(e.message, 'error') }
+  const eliminarUnaTarima = (idTarima) => {
+    setModalConfirmar({
+      titulo: 'Eliminar tarima',
+      mensaje: '¿Eliminar esta tarima? Todas sus cantidades vuelven a pendiente.',
+      peligro: true,
+      accion: async () => {
+        try { await api.eliminarTarima(id, idTarima); toast('Tarima eliminada', 'ok'); cargar() }
+        catch (e) { toast(e.message, 'error') }
+      }
+    })
   }
 
   const cerrarConDims = async (dims) => {
@@ -832,6 +859,12 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
       )}
       {modalExt && (
         <ModalExtension producto={modalExt} onClose={() => setModalExt(null)} onConfirmar={crearExtension} />
+      )}
+      {modalConfirmar && (
+        <ModalConfirmar titulo={modalConfirmar.titulo} mensaje={modalConfirmar.mensaje}
+          textoConfirmar={modalConfirmar.peligro ? 'Eliminar' : 'Confirmar'} peligro={modalConfirmar.peligro}
+          onClose={() => setModalConfirmar(null)}
+          onConfirmar={async () => { await modalConfirmar.accion(); setModalConfirmar(null) }} />
       )}
       {modalSucursal && (
         <ModalSucursal actual={ent.sucursal} onClose={() => setModalSucursal(false)} onConfirmar={guardarSucursal} />
