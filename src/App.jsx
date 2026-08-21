@@ -13,12 +13,20 @@ async function imprimirConMotivo(fnMarcar, toast) {
     window.print()
   } catch (e) {
     if (/motivo/i.test(e.message)) {
-      const motivo = window.prompt('Este documento ya fue impreso antes.\nEscribe el motivo de la reimpresion:')
+      const motivo = window.prompt(e.message + '\n\nEscribe el motivo:')
       if (!motivo || !motivo.trim()) { toast('Reimpresion cancelada: se requiere un motivo', 'error'); return }
       try {
         await fnMarcar(motivo.trim())
         window.print()
-      } catch (e2) { toast(e2.message, 'error') }
+      } catch (e2) {
+        if (/[Ss]olicitud enviada/.test(e2.message)) {
+          toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
+        } else {
+          toast(e2.message, 'error')
+        }
+      }
+    } else if (/[Ss]olicitud/.test(e.message)) {
+      toast(e.message, 'error')
     } else {
       toast(e.message, 'error')
     }
@@ -283,7 +291,7 @@ function NuevaEntrega({ toast, irDetalle }) {
 }
 
 // ── MODAL GENERICO ────────────────────────────────────────
-function Modal({ titulo, sub, onClose, children, footer }) {
+export function Modal({ titulo, sub, onClose, children, footer }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={e => e.stopPropagation()}>
@@ -842,12 +850,14 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
 
   if (!datos) return <div className="cargando">Generando etiqueta(s)...</div>
 
+  const yaImpresa = datos.some(d => (d.impresa_veces || 0) > 0)
+
   return (
     <div>
       <div className="contenedor" style={{marginBottom: 12}}>
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
-          <button className="btn-principal" onClick={imprimir}>Imprimir</button>
+          <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
         </div>
       </div>
       <Etiquetas datos={datos} />
@@ -866,13 +876,14 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
   if (!datos) return <div className="cargando">Generando etiquetas...</div>
 
   const imprimir = () => imprimirConMotivo((motivo) => api.marcarImpresaSueltas(idEntrega, motivo), toast)
+  const yaImpresa = datos.some(d => (d.impresa_veces || 0) > 0)
 
   return (
     <div>
       <div className="contenedor" style={{marginBottom: 12}}>
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
-          <button className="btn-principal" onClick={imprimir}>Imprimir</button>
+          <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
         </div>
       </div>
       <EtiquetasSueltas datos={datos} />
@@ -891,13 +902,14 @@ function VistaPacking({ idEntrega, volver, toast }) {
   if (!datos) return <div className="cargando">Generando lista de empaque...</div>
 
   const imprimir = () => imprimirConMotivo((motivo) => api.marcarImpresoPacking(idEntrega, motivo), toast)
+  const yaImpresa = (datos.entrega?.packing_impreso_veces || 0) > 0
 
   return (
     <div>
       <div className="contenedor" style={{marginBottom: 12}}>
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
-          <button className="btn-principal" onClick={imprimir}>Imprimir</button>
+          <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
         </div>
       </div>
       <ListaEmpaque datos={datos} />
