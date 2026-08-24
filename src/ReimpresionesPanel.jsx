@@ -63,10 +63,10 @@ export default function ReimpresionesPanel({ toast }) {
             <tbody>
               {pendientes.map(s => (
                 <tr key={s.id}>
-                  <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{(s.fecha_solicitud || '').substring(0,16)}</td>
+                  <td style={{fontSize:11,color:'var(--text3)'}}>{(s.fecha_solicitud || '').substring(0,16)}</td>
                   <td><span className="chip chip-warn">{s.tipo}</span></td>
-                  <td style={{fontFamily:'var(--mono)',fontWeight:700}}>{s.num_entrega || s.referencia}</td>
-                  <td style={{fontFamily:'var(--mono)'}}>{s.solicitado_por}</td>
+                  <td style={{fontWeight:700}}>{s.num_entrega || s.referencia}</td>
+                  <td style={{}}>{s.solicitado_por}</td>
                   <td style={{color:'var(--text2)',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.motivo}</td>
                   <td style={{display:'flex',gap:6}}>
                     <button className="btn-mini btn-mini-exito" onClick={() => setModalResolver({ solicitud: s, accion: 'aprobar' })}>Aprobar</button>
@@ -87,12 +87,12 @@ export default function ReimpresionesPanel({ toast }) {
             <tbody>
               {resueltas.slice(0, 30).map(s => (
                 <tr key={s.id}>
-                  <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{(s.fecha_resolucion || s.fecha_solicitud || '').substring(0,16)}</td>
+                  <td style={{fontSize:11,color:'var(--text3)'}}>{(s.fecha_resolucion || s.fecha_solicitud || '').substring(0,16)}</td>
                   <td><span className="chip chip-ok">{s.tipo}</span></td>
-                  <td style={{fontFamily:'var(--mono)',fontWeight:700}}>{s.num_entrega || s.referencia}</td>
-                  <td style={{fontFamily:'var(--mono)'}}>{s.solicitado_por}</td>
+                  <td style={{fontWeight:700}}>{s.num_entrega || s.referencia}</td>
+                  <td style={{}}>{s.solicitado_por}</td>
                   <td><span className={s.estatus === 'aprobada' || s.estatus === 'usada' ? 'chip chip-ok' : 'chip chip-warn'}>{s.estatus}</span></td>
-                  <td style={{fontFamily:'var(--mono)',fontSize:12}}>{s.autorizado_por || '—'}</td>
+                  <td style={{fontSize:12}}>{s.autorizado_por || '—'}</td>
                 </tr>
               ))}
             </tbody>
