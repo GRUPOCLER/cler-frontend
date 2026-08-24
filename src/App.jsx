@@ -222,9 +222,9 @@ function Dashboard({ irDetalle, onFusionar }) {
         </div>
       </div>
 
-      <div className="panel">
+      <div className="panel panel-filtros">
         <div className="panel-titulo">
-          Filtros
+          <span className="filtros-icono">⚗</span> Filtros
           {hayFiltrosActivos && (
             <button className="btn-quitar-mini" style={{marginLeft:'auto'}}
               onClick={() => setFiltros({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '' })}>
@@ -232,35 +232,35 @@ function Dashboard({ irDetalle, onFusionar }) {
             </button>
           )}
         </div>
-        <div className="filtros-grid">
-          <div>
-            <label className="dim-label">Desde</label>
-            <input type="date" className="inp" value={filtros.desde} onChange={e => actualizarFiltro('desde', e.target.value)} />
+        <div className="filtros-toolbar">
+          <div className="filtro-campo">
+            <label>Desde</label>
+            <input type="date" value={filtros.desde} onChange={e => actualizarFiltro('desde', e.target.value)} />
           </div>
-          <div>
-            <label className="dim-label">Hasta</label>
-            <input type="date" className="inp" value={filtros.hasta} onChange={e => actualizarFiltro('hasta', e.target.value)} />
+          <div className="filtro-campo">
+            <label>Hasta</label>
+            <input type="date" value={filtros.hasta} onChange={e => actualizarFiltro('hasta', e.target.value)} />
           </div>
-          <div>
-            <label className="dim-label">Estatus</label>
-            <select className="inp" value={filtros.estatus} onChange={e => actualizarFiltro('estatus', e.target.value)}>
+          <div className="filtro-campo">
+            <label>Estatus</label>
+            <select value={filtros.estatus} onChange={e => actualizarFiltro('estatus', e.target.value)}>
               <option value="">Todos</option>
               <option value="pendiente">Pendiente</option>
               <option value="completada">Completada</option>
             </select>
           </div>
-          <div>
-            <label className="dim-label">Sistema</label>
-            <select className="inp" value={filtros.sistema} onChange={e => actualizarFiltro('sistema', e.target.value)}>
+          <div className="filtro-campo">
+            <label>Sistema</label>
+            <select value={filtros.sistema} onChange={e => actualizarFiltro('sistema', e.target.value)}>
               <option value="">Todos</option>
               <option value="TAR">Tarimas</option>
               <option value="CS">Carga suelta</option>
               <option value="MIX">Mixto</option>
             </select>
           </div>
-          <div>
-            <label className="dim-label">Tipo de orden</label>
-            <select className="inp" value={filtros.fuente} onChange={e => actualizarFiltro('fuente', e.target.value)}>
+          <div className="filtro-campo">
+            <label>Tipo de orden</label>
+            <select value={filtros.fuente} onChange={e => actualizarFiltro('fuente', e.target.value)}>
               <option value="">Todos</option>
               <option value="odoo">Odoo</option>
               <option value="pdf">PDF importado</option>
