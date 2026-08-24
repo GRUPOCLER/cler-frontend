@@ -157,11 +157,11 @@ export default function AdminPanel({ toast, miRol }) {
               <tbody>
                 {usuarios.map(u => (
                   <tr key={u.usuario} onClick={() => setModalUsuario(u)}>
-                    <td style={{fontFamily:'var(--mono)',fontWeight:700}}>{u.usuario}</td>
+                    <td style={{fontWeight:700}}>{u.usuario}</td>
                     <td>{u.nombre_display || '—'}</td>
                     <td><span className={'chip ' + chipRol(u.rol)}>{u.rol}</span></td>
                     <td><span className={u.activo ? 'chip chip-ok' : 'chip chip-warn'}>{u.activo ? 'activo' : 'inactivo'}</span></td>
-                    <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{(u.ultimo_acceso || '—').substring(0,16)}</td>
+                    <td style={{fontSize:11,color:'var(--text3)'}}>{(u.ultimo_acceso || '—').substring(0,16)}</td>
                     <td><button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalUsuario(u) }}>Editar</button></td>
                   </tr>
                 ))}
@@ -182,8 +182,8 @@ export default function AdminPanel({ toast, miRol }) {
               <tbody>
                 {logs.map(l => (
                   <tr key={l.id}>
-                    <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{(l.fecha || '').substring(0,19)}</td>
-                    <td style={{fontFamily:'var(--mono)'}}>{l.usuario}</td>
+                    <td style={{fontSize:11,color:'var(--text3)'}}>{(l.fecha || '').substring(0,19)}</td>
+                    <td style={{}}>{l.usuario}</td>
                     <td>{l.accion}</td>
                     <td style={{color:'var(--text2)'}}>{l.detalle}</td>
                     <td><span className={l.exito ? 'chip chip-ok' : 'chip chip-warn'}>{l.exito ? 'ok' : 'error'}</span></td>
