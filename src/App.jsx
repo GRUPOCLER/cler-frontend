@@ -159,14 +159,48 @@ function agruparPorFusion(entregas) {
   return resultado
 }
 
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+const FUENTE_LABEL = { odoo: 'Odoo', pdf: 'PDF importado', manual: 'Manual' }
+
+function agruparPorMes(entregas) {
+  const grupos = []
+  let claveActual = null
+  entregas.forEach(e => {
+    const fecha = e.fecha_creacion ? new Date(e.fecha_creacion) : null
+    const clave = fecha ? `${MESES[fecha.getMonth()]} ${fecha.getFullYear()}` : 'Sin fecha'
+    if (clave !== claveActual) {
+      grupos.push({ mes: clave, filas: [] })
+      claveActual = clave
+    }
+    grupos[grupos.length - 1].filas.push(e)
+  })
+  return grupos
+}
+
 function Dashboard({ irDetalle, onFusionar }) {
   const [stats, setStats] = useState(null)
   const [entregas, setEntregas] = useState(null)
+  const [filtros, setFiltros] = useState({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '' })
+
+  const cargar = () => {
+    const params = new URLSearchParams({ limite: '200' })
+    if (filtros.estatus) params.set('estatus', filtros.estatus)
+    if (filtros.sistema) params.set('sistema', filtros.sistema)
+    if (filtros.fuente)  params.set('fuente', filtros.fuente)
+    if (filtros.desde)   params.set('fecha_desde', filtros.desde)
+    if (filtros.hasta)   params.set('fecha_hasta', filtros.hasta)
+    api.listarEntregas(params.toString()).then(d => setEntregas(agruparPorFusion(d))).catch(() => setEntregas([]))
+  }
 
   useEffect(() => {
     api.getDashboard().then(setStats).catch(() => setStats({}))
-    api.listarEntregas('limite=25').then(d => setEntregas(agruparPorFusion(d))).catch(() => setEntregas([]))
   }, [])
+
+  useEffect(() => { cargar() }, [filtros])
+
+  const actualizarFiltro = (campo, valor) => setFiltros(f => ({ ...f, [campo]: valor }))
+  const hayFiltrosActivos = Object.values(filtros).some(v => v)
+  const grupos = entregas ? agruparPorMes(entregas) : []
 
   return (
     <div className="contenedor">
@@ -190,51 +224,106 @@ function Dashboard({ irDetalle, onFusionar }) {
 
       <div className="panel">
         <div className="panel-titulo">
-          Entregas recientes
+          Filtros
+          {hayFiltrosActivos && (
+            <button className="btn-quitar-mini" style={{marginLeft:'auto'}}
+              onClick={() => setFiltros({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '' })}>
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+        <div className="filtros-grid">
+          <div>
+            <label className="dim-label">Desde</label>
+            <input type="date" className="inp" value={filtros.desde} onChange={e => actualizarFiltro('desde', e.target.value)} />
+          </div>
+          <div>
+            <label className="dim-label">Hasta</label>
+            <input type="date" className="inp" value={filtros.hasta} onChange={e => actualizarFiltro('hasta', e.target.value)} />
+          </div>
+          <div>
+            <label className="dim-label">Estatus</label>
+            <select className="inp" value={filtros.estatus} onChange={e => actualizarFiltro('estatus', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="completada">Completada</option>
+            </select>
+          </div>
+          <div>
+            <label className="dim-label">Sistema</label>
+            <select className="inp" value={filtros.sistema} onChange={e => actualizarFiltro('sistema', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="TAR">Tarimas</option>
+              <option value="CS">Carga suelta</option>
+              <option value="MIX">Mixto</option>
+            </select>
+          </div>
+          <div>
+            <label className="dim-label">Tipo de orden</label>
+            <select className="inp" value={filtros.fuente} onChange={e => actualizarFiltro('fuente', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="odoo">Odoo</option>
+              <option value="pdf">PDF importado</option>
+              <option value="manual">Manual</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-titulo">
+          Entregas
+          {entregas && <span className="chip chip-ok">{entregas.length}</span>}
           <button className="btn-quitar-mini" style={{marginLeft:'auto'}} onClick={onFusionar}>
             Fusionar entregas
           </button>
         </div>
         {!entregas ? <div className="cargando">Cargando...</div>
-          : entregas.length === 0 ? <div className="vacio">Sin entregas todavia. Crea la primera desde Nueva entrega.</div>
-          : (
-          <table className="tabla">
-            <thead><tr>
-              <th>Folio</th><th>Sistema</th><th>Cliente</th><th>Fecha</th><th>Estatus</th>
-            </tr></thead>
-            <tbody>
-              {entregas.map((e, i) => {
-                const anterior = entregas[i - 1]
-                const nuevoGrupo = e.grupo_fusion && anterior?.grupo_fusion && anterior.grupo_fusion !== e.grupo_fusion
-                return (
-                <tr key={e.id_entrega} onClick={() => irDetalle(e.id_entrega)}
-                  style={{
-                    ...(e.colorFusion ? {
-                      background: e.colorFusion + '14',
-                      borderLeft: '3px solid ' + e.colorFusion
-                    } : {}),
-                    ...(nuevoGrupo ? { borderTop: '2px solid var(--border2)' } : {})
-                  }}>
-                  <td>
-                    <span style={{fontFamily:'var(--mono)',fontWeight:700}}>{e.num_entrega}</span>
-                    {e.es_fusion && (
-                      <span className="chip" style={{background:e.colorFusion+'22',color:e.colorFusion,marginLeft:6,cursor:'help'}}
-                        title={'Fusionada con: ' + e.fusion_con.join(', ')}>
-                        🔗 +{e.fusion_con.length}
-                      </span>
-                    )}
-                  </td>
-                  <td><span className={'badge-sistema badge-' + e.sistema}>{e.sistema}</span></td>
-                  <td>{e.nombre_cliente || '—'}</td>
-                  <td style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--text3)'}}>
-                    {(e.fecha_creacion || '').substring(0, 10)}</td>
-                  <td><span className={'badge-estatus badge-' + e.estatus}>{e.estatus}</span></td>
-                </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
+          : entregas.length === 0 ? <div className="vacio">
+              {hayFiltrosActivos ? 'Sin entregas con estos filtros.' : 'Sin entregas todavia. Crea la primera desde Nueva entrega.'}
+            </div>
+          : grupos.map(grupo => (
+            <div key={grupo.mes} style={{marginBottom:18}}>
+              <div className="mes-encabezado">{grupo.mes}</div>
+              <table className="tabla">
+                <thead><tr>
+                  <th>Folio</th><th>Sistema</th><th>Cliente</th><th>Fecha</th><th>Origen</th><th>Estatus</th>
+                </tr></thead>
+                <tbody>
+                  {grupo.filas.map((e, i) => {
+                    const anterior = grupo.filas[i - 1]
+                    const nuevoGrupo = e.grupo_fusion && anterior?.grupo_fusion && anterior.grupo_fusion !== e.grupo_fusion
+                    return (
+                    <tr key={e.id_entrega} onClick={() => irDetalle(e.id_entrega)}
+                      style={{
+                        ...(e.colorFusion ? {
+                          background: e.colorFusion + '14',
+                          borderLeft: '3px solid ' + e.colorFusion
+                        } : {}),
+                        ...(nuevoGrupo ? { borderTop: '2px solid var(--border2)' } : {})
+                      }}>
+                      <td>
+                        <span style={{fontWeight:700}}>{e.num_entrega}</span>
+                        {e.es_fusion && (
+                          <span className="chip" style={{background:e.colorFusion+'22',color:e.colorFusion,marginLeft:6,cursor:'help'}}
+                            title={'Fusionada con: ' + e.fusion_con.join(', ')}>
+                            🔗 +{e.fusion_con.length}
+                          </span>
+                        )}
+                      </td>
+                      <td><span className={'badge-sistema badge-' + e.sistema}>{e.sistema}</span></td>
+                      <td>{e.nombre_cliente || '—'}</td>
+                      <td style={{fontSize:12,color:'var(--text3)'}}>
+                        {(e.fecha_creacion || '').substring(0, 10)}</td>
+                      <td style={{fontSize:12,color:'var(--text3)'}}>{FUENTE_LABEL[e.fuente] || e.fuente || '—'}</td>
+                      <td><span className={'badge-estatus badge-' + e.estatus}>{e.estatus}</span></td>
+                    </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
       </div>
     </div>
   )
@@ -420,7 +509,7 @@ function ModalAsignar({ tarimasAbiertas, productos, idTarimaPre, onClose, onConf
       {productos.map(p => (
         <div key={p.id_producto} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--amarillo)'}}>{p.clave}</div>
+            <div style={{fontSize:11,color:'var(--amarillo)'}}>{p.clave}</div>
             <div style={{fontSize:12,color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</div>
             <div style={{fontSize:10,color:'var(--text3)'}}>Disponible: {p.cantidad_pendiente}</div>
           </div>
@@ -794,11 +883,11 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
                       style={{display:'grid',gridTemplateColumns:'20px 1fr 2fr 50px 60px 60px 50px',gap:8,alignItems:'center',
                         padding:'8px 12px',borderBottom:'1px solid var(--border)',fontSize:12,opacity:done?0.5:1}}>
                       <input type="checkbox" disabled={done} checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} />
-                      <span style={{fontFamily:'var(--mono)',color:'var(--amarillo)',fontWeight:700,fontSize:11}}>{p.clave}</span>
+                      <span style={{color:'var(--amarillo)',fontWeight:700,fontSize:11}}>{p.clave}</span>
                       <span style={{color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</span>
-                      <span style={{textAlign:'right',fontFamily:'var(--mono)'}}>{p.cantidad_total}</span>
-                      <span style={{textAlign:'right',fontFamily:'var(--mono)',color:'var(--text3)'}}>{p.cantidad_asignada || 0}</span>
-                      <span style={{textAlign:'right',fontFamily:'var(--mono)',color: done ? 'var(--text3)' : 'var(--amarillo)'}}>{p.cantidad_pendiente}</span>
+                      <span style={{textAlign:'right',}}>{p.cantidad_total}</span>
+                      <span style={{textAlign:'right',color:'var(--text3)'}}>{p.cantidad_asignada || 0}</span>
+                      <span style={{textAlign:'right',color: done ? 'var(--text3)' : 'var(--amarillo)'}}>{p.cantidad_pendiente}</span>
                       <span>{!esExt && <button className="btn-quitar-mini" onClick={() => setModalExt(p)}>+Ext</button>}</span>
                     </div>
                   )
@@ -1134,7 +1223,7 @@ export default function App() {
       <Migaja vista={vista} idDetalle={idDetalle} />
       {!enVistaEtiqueta && (
         <div className="topbar">
-          <div className="topbar-marca">GRUPO<span>CLER</span></div>
+          <button className="topbar-marca" onClick={() => setVista('dashboard')} title="Ir al inicio">GRUPO<span>CLER</span></button>
           <nav className="topbar-nav">
             <button className={'nav-btn' + (vista === 'dashboard' ? ' activo' : '')}
               onClick={() => setVista('dashboard')}>Pulso</button>
