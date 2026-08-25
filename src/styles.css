@@ -541,7 +541,9 @@ input,select{font-family:var(--sans);}
 }
 .et-suelta-top{display:flex;align-items:baseline;justify-content:space-between;gap:6px;}
 .et-suelta-clave{font-family:monospace;font-size:17px;font-weight:900;color:#000;letter-spacing:.01em;line-height:1.1;}
-.et-suelta-sku{font-size:9px;font-weight:700;color:#444;white-space:nowrap;}
+.et-suelta-bulto-wrap{text-align:right;white-space:nowrap;line-height:1.05;}
+.et-suelta-bulto-lbl{font-size:6.5px;text-transform:uppercase;letter-spacing:.06em;color:#666;}
+.et-suelta-bulto{font-size:13px;font-weight:900;color:#000;}
 .et-suelta-desc{
   font-size:9px;color:#111;line-height:1.2;
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
