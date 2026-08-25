@@ -8,7 +8,10 @@ function PaginaEtiquetaSuelta({ d }) {
     <div className="et-suelta-pagina">
       <div className="et-suelta-top">
         <div className="et-suelta-clave">{d.clave}</div>
-        <div className="et-suelta-sku">SKU {d.num_sku}/{d.total_skus_entrega}</div>
+        <div className="et-suelta-bulto-wrap">
+          <div className="et-suelta-bulto-lbl">Bulto</div>
+          <div className="et-suelta-bulto">{d.num_sku}/{d.total_skus_entrega}</div>
+        </div>
       </div>
 
       <div className="et-suelta-desc">{d.descripcion}</div>
