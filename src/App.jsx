@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
 import * as api from './api.js'
 import Etiquetas from './Etiquetas.jsx'
 import EtiquetasSueltas from './EtiquetasSueltas.jsx'
@@ -662,7 +663,10 @@ function ModalFusion({ onClose, onConfirmar }) {
 }
 
 // ── DETALLE DE ENTREGA ───────────────────────────────────
-function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
+function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const volver = () => navigate('/')
   const [ent, setEnt] = useState(null)
   const [sel, setSel] = useState(new Set())
   const [modalNueva, setModalNueva] = useState(false)
@@ -998,7 +1002,10 @@ function Detalle({ id, volver, toast, verEtiquetas, verEtiquetasSueltas, verPack
 }
 
 // ── VISTA DE ETIQUETAS (imprimible) ──────────────────────
-function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
+function VistaEtiquetas({ toast }) {
+  const { id: idEntrega, idTarima } = useParams()
+  const navigate = useNavigate()
+  const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null) // { fnMarcar, mensaje } | null
 
@@ -1055,7 +1062,10 @@ function VistaEtiquetas({ idEntrega, idTarima, volver, toast }) {
 }
 
 // ── VISTA DE ETIQUETAS SUELTAS (por SKU, carga suelta) ───
-function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
+function VistaEtiquetasSueltas({ toast }) {
+  const { id: idEntrega } = useParams()
+  const navigate = useNavigate()
+  const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null)
 
@@ -1105,7 +1115,10 @@ function VistaEtiquetasSueltas({ idEntrega, volver, toast }) {
 }
 
 // ── VISTA DE LISTA DE EMPAQUE (imprimible) ────────────────
-function VistaPacking({ idEntrega, volver, toast }) {
+function VistaPacking({ toast }) {
+  const { id: idEntrega } = useParams()
+  const navigate = useNavigate()
+  const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null)
 
@@ -1155,15 +1168,21 @@ function VistaPacking({ idEntrega, volver, toast }) {
 }
 
 // ── MIGAJA DE CONTEXTO — siempre visible, incluso al imprimir ──
-function Migaja({ vista, idDetalle }) {
+function Migaja() {
+  const { pathname } = useLocation()
   const partes = ['Pulso']
-  if (vista === 'nueva') partes.push('Nueva entrega')
-  if (vista === 'detalle') partes.push(idDetalle || 'Entrega')
-  if (vista === 'etiquetas') { partes.push(idDetalle || 'Entrega'); partes.push('Etiquetas de tarima') }
-  if (vista === 'etiquetas-sueltas') { partes.push(idDetalle || 'Entrega'); partes.push('Etiquetas sueltas') }
-  if (vista === 'packing') { partes.push(idDetalle || 'Entrega'); partes.push('Lista de empaque') }
-  if (vista === 'reimpresiones') { partes.length = 0; partes.push('Reimpresiones') }
-  if (vista === 'admin') { partes.length = 0; partes.push('Administracion') }
+  const seg = pathname.split('/').filter(Boolean) // ej: ['entregas','CS-123','etiquetas']
+
+  if (pathname === '/nueva') partes.push('Nueva entrega')
+  else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Reimpresiones') }
+  else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
+  else if (seg[0] === 'entregas' && seg[1]) {
+    partes.push(seg[1])
+    if (seg[2] === 'etiquetas') partes.push('Etiquetas de tarima')
+    if (seg[2] === 'etiquetas-sueltas') partes.push('Etiquetas sueltas')
+    if (seg[2] === 'packing') partes.push('Lista de empaque')
+  }
+
   return (
     <div className="migaja">
       {partes.map((p, i) => (
@@ -1176,12 +1195,11 @@ function Migaja({ vista, idDetalle }) {
 // ── APP ──────────────────────────────────────────────────
 export default function App() {
   const [logueado, setLogueado] = useState(!!api.getToken())
-  const [vista, setVista] = useState('dashboard')
-  const [idDetalle, setIdDetalle] = useState(null)
-  const [etiquetaTarima, setEtiquetaTarima] = useState(null)
   const [modalFusion, setModalFusion] = useState(false)
   const [pendientesReimpresion, setPendientesReimpresion] = useState(0)
   const [toast, Toast] = useToast()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     if (!logueado) return
@@ -1196,16 +1214,12 @@ export default function App() {
   if (!logueado) return <Login onOk={() => setLogueado(true)} />
 
   const user = api.getUser()
-  const irDetalle = (id) => { setIdDetalle(id); setVista('detalle') }
-  const verEtiquetas = (idEnt, idTar = null) => {
-    setIdDetalle(idEnt); setEtiquetaTarima(idTar); setVista('etiquetas')
-  }
-  const verEtiquetasSueltas = (idEnt) => {
-    setIdDetalle(idEnt); setVista('etiquetas-sueltas')
-  }
-  const verPacking = (idEnt) => {
-    setIdDetalle(idEnt); setVista('packing')
-  }
+  const irDetalle = (id) => navigate(`/entregas/${id}`)
+  const verEtiquetas = (idEnt, idTar = null) =>
+    navigate(idTar ? `/entregas/${idEnt}/etiquetas/${idTar}` : `/entregas/${idEnt}/etiquetas`)
+  const verEtiquetasSueltas = (idEnt) => navigate(`/entregas/${idEnt}/etiquetas-sueltas`)
+  const verPacking = (idEnt) => navigate(`/entregas/${idEnt}/packing`)
+
   const confirmarFusion = async (idsSeleccionados) => {
     try {
       const idPrimaria = idsSeleccionados[0]
@@ -1216,29 +1230,29 @@ export default function App() {
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const enVistaEtiqueta = vista === 'etiquetas' || vista === 'etiquetas-sueltas' || vista === 'packing'
+  const enVistaEtiqueta = /\/(etiquetas|etiquetas-sueltas|packing)(\/|$)/.test(location.pathname)
 
   return (
     <div className="shell">
-      <Migaja vista={vista} idDetalle={idDetalle} />
+      <Migaja />
       {!enVistaEtiqueta && (
         <div className="topbar">
-          <button className="topbar-marca" onClick={() => setVista('dashboard')} title="Ir al inicio">GRUPO<span>CLER</span></button>
+          <button className="topbar-marca" onClick={() => navigate('/')} title="Ir al inicio">GRUPO<span>CLER</span></button>
           <nav className="topbar-nav">
-            <button className={'nav-btn' + (vista === 'dashboard' ? ' activo' : '')}
-              onClick={() => setVista('dashboard')}>Pulso</button>
-            <button className={'nav-btn' + (vista === 'nueva' ? ' activo' : '')}
-              onClick={() => setVista('nueva')}>Nueva entrega</button>
+            <button className={'nav-btn' + (location.pathname === '/' ? ' activo' : '')}
+              onClick={() => navigate('/')}>Pulso</button>
+            <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
+              onClick={() => navigate('/nueva')}>Nueva entrega</button>
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
-              <button className={'nav-btn' + (vista === 'reimpresiones' ? ' activo' : '')}
-                onClick={() => setVista('reimpresiones')}>
+              <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
+                onClick={() => navigate('/reimpresiones')}>
                 Reimpresiones
                 {pendientesReimpresion > 0 && <span className="chip chip-warn" style={{marginLeft:6}}>{pendientesReimpresion}</span>}
               </button>
             )}
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
-              <button className={'nav-btn' + (vista === 'admin' ? ' activo' : '')}
-                onClick={() => setVista('admin')}>
+              <button className={'nav-btn' + (location.pathname === '/admin' ? ' activo' : '')}
+                onClick={() => navigate('/admin')}>
                 {user?.rol === 'gerente' ? 'Registrar operador' : 'Administracion'}
               </button>
             )}
@@ -1252,22 +1266,20 @@ export default function App() {
         </div>
       )}
       <div className="contenido">
-        {vista === 'dashboard' && <Dashboard irDetalle={irDetalle} onFusionar={() => setModalFusion(true)} />}
-        {vista === 'nueva'     && <NuevaEntrega toast={toast} irDetalle={irDetalle} />}
-        {vista === 'detalle'   && idDetalle &&
-          <Detalle id={idDetalle} volver={() => setVista('dashboard')} toast={toast}
-            verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} verPacking={verPacking} />}
-        {vista === 'etiquetas' && idDetalle &&
-          <VistaEtiquetas idEntrega={idDetalle} idTarima={etiquetaTarima}
-            volver={() => setVista('detalle')} toast={toast} />}
-        {vista === 'etiquetas-sueltas' && idDetalle &&
-          <VistaEtiquetasSueltas idEntrega={idDetalle}
-            volver={() => setVista('detalle')} toast={toast} />}
-        {vista === 'packing' && idDetalle &&
-          <VistaPacking idEntrega={idDetalle}
-            volver={() => setVista('detalle')} toast={toast} />}
-        {vista === 'admin' && <AdminPanel toast={toast} miRol={user?.rol} />}
-        {vista === 'reimpresiones' && <ReimpresionesPanel toast={toast} />}
+        <Routes>
+          <Route path="/" element={<Dashboard irDetalle={irDetalle} onFusionar={() => setModalFusion(true)} />} />
+          <Route path="/nueva" element={<NuevaEntrega toast={toast} irDetalle={irDetalle} />} />
+          <Route path="/entregas/:id" element={
+            <Detalle toast={toast} verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} verPacking={verPacking} />
+          } />
+          <Route path="/entregas/:id/etiquetas" element={<VistaEtiquetas toast={toast} />} />
+          <Route path="/entregas/:id/etiquetas/:idTarima" element={<VistaEtiquetas toast={toast} />} />
+          <Route path="/entregas/:id/etiquetas-sueltas" element={<VistaEtiquetasSueltas toast={toast} />} />
+          <Route path="/entregas/:id/packing" element={<VistaPacking toast={toast} />} />
+          <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
+          <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
       {modalFusion && (
         <ModalFusion onClose={() => setModalFusion(false)} onConfirmar={confirmarFusion} />
