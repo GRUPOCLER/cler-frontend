@@ -2,6 +2,16 @@
 //  ETIQUETA DE TARIMA — imprimible, 10x14cm
 //  Replica el diseno del sistema Apps Script original
 // ============================================================
+import { useEffect } from 'react'
+
+function usarTamanoPagina(reglaCss) {
+  useEffect(() => {
+    const estilo = document.createElement('style')
+    estilo.textContent = reglaCss
+    document.head.appendChild(estilo)
+    return () => document.head.removeChild(estilo)
+  }, [reglaCss])
+}
 
 const MAX_PRODS_POR_PAGINA = 6
 
@@ -124,6 +134,7 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
 }
 
 export default function Etiquetas({ datos }) {
+  usarTamanoPagina('@page { size: 10cm 14cm; margin: 0; }')
   // datos: array de objetos etiqueta (uno o varias tarimas)
   const paginas = []
   datos.forEach(d => {
