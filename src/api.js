@@ -42,6 +42,7 @@ export async function login(usuario, password) {
 }
 
 export const listarEntregas   = (params = '') => req('/api/entregas/' + (params ? '?' + params : ''))
+export const buscarEntregas   = (termino) => req('/api/entregas/?buscar=' + encodeURIComponent(termino) + '&limite=15')
 export const detalleEntrega   = (id)          => req('/api/entregas/' + id)
 export const crearEntrega     = (body)        => req('/api/entregas/', { method: 'POST', body: JSON.stringify(body) })
 export const actualizarEntrega= (id, body)    => req('/api/entregas/' + id, { method: 'PATCH', body: JSON.stringify(body) })
