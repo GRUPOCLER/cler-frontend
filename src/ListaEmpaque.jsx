@@ -67,8 +67,8 @@ export default function ListaEmpaque({ datos }) {
             <thead>
               <tr className="pk-bulto-head">
                 <th colSpan={t.productos.length ? 1 : 1} className="pk-bulto-titulo">
-                  BULTO {t.numero_tarima} / {total_bultos}
-                  <span className="pk-bulto-id">{t.id_tarima}</span>
+                  BULTO {t.numero_bulto} / {t.total_bultos}
+                  <span className="pk-bulto-id">Tarima {t.numero_tarima} — {t.id_tarima}</span>
                 </th>
                 <th className="pk-bulto-meta" colSpan={3}>
                   Piezas: <b>{t.total_piezas}</b>
@@ -100,15 +100,16 @@ export default function ListaEmpaque({ datos }) {
         </div>
       ))}
 
-      {sueltos && sueltos.length > 0 && (
-        <div className="pk-bulto">
+      {sueltos && sueltos.length > 0 && sueltos.map(p => (
+        <div key={p.id_producto} className="pk-bulto">
           <table className="pk-tabla-bulto">
             <thead>
               <tr className="pk-bulto-head pk-bulto-head-suelto">
-                <th colSpan={4} className="pk-bulto-titulo">
-                  CARGA SUELTA
-                  <span className="pk-bulto-id">{sueltos.length} SKU{sueltos.length !== 1 ? 's' : ''}</span>
+                <th colSpan={2} className="pk-bulto-titulo">
+                  BULTO {p.numero_bulto} / {p.total_bultos}
+                  <span className="pk-bulto-id">Carga suelta</span>
                 </th>
+                <th className="pk-bulto-meta" colSpan={2}>Pieza unica / caja</th>
               </tr>
               <tr className="pk-col-head">
                 <th style={{textAlign:'left'}}>Clave</th>
@@ -118,18 +119,16 @@ export default function ListaEmpaque({ datos }) {
               </tr>
             </thead>
             <tbody>
-              {sueltos.map((p, i) => (
-                <tr key={p.id_producto} className={i % 2 === 0 ? 'pk-row-a' : 'pk-row-b'}>
-                  <td className="pk-td-clave">{p.clave}</td>
-                  <td>{p.descripcion}</td>
-                  <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_pendiente ?? p.cantidad_total}</td>
-                  <td style={{textAlign:'center',color:'#555'}}>{p.unidad}</td>
-                </tr>
-              ))}
+              <tr className="pk-row-a">
+                <td className="pk-td-clave">{p.clave}</td>
+                <td>{p.descripcion}</td>
+                <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_pendiente ?? p.cantidad_total}</td>
+                <td style={{textAlign:'center',color:'#555'}}>{p.unidad}</td>
+              </tr>
             </tbody>
           </table>
         </div>
-      )}
+      ))}
 
       <table className="pk-tabla-totales">
         <tbody>
