@@ -2,6 +2,18 @@
 //  ETIQUETAS SUELTAS — carga suelta, una por SKU
 //  Formato compacto 4x2 pulgadas (etiqueta termica)
 // ============================================================
+import { useEffect } from 'react'
+
+// Le dice al navegador que el tamano de pagina de impresion ES 4x2in,
+// para que no encoja el contenido al asumir tamano Carta por defecto.
+function usarTamanoPagina(reglaCss) {
+  useEffect(() => {
+    const estilo = document.createElement('style')
+    estilo.textContent = reglaCss
+    document.head.appendChild(estilo)
+    return () => document.head.removeChild(estilo)
+  }, [reglaCss])
+}
 
 function PaginaEtiquetaSuelta({ d }) {
   return (
@@ -38,6 +50,7 @@ function PaginaEtiquetaSuelta({ d }) {
 }
 
 export default function EtiquetasSueltas({ datos }) {
+  usarTamanoPagina('@page { size: 4in 2in; margin: 0; }')
   return (
     <div className="et-suelta-wrap">
       {datos.map(d => <PaginaEtiquetaSuelta key={d.id_producto} d={d} />)}
