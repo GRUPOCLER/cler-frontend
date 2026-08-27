@@ -220,7 +220,8 @@ function agruparPorMes(entregas) {
 function Dashboard({ irDetalle, onFusionar }) {
   const [stats, setStats] = useState(null)
   const [entregas, setEntregas] = useState(null)
-  const [filtros, setFiltros] = useState({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '' })
+  const [filtros, setFiltros] = useState({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '', buscar: '' })
+  const [buscarTexto, setBuscarTexto] = useState('')
 
   const cargar = () => {
     const params = new URLSearchParams({ limite: '200' })
@@ -229,6 +230,7 @@ function Dashboard({ irDetalle, onFusionar }) {
     if (filtros.fuente)  params.set('fuente', filtros.fuente)
     if (filtros.desde)   params.set('fecha_desde', filtros.desde)
     if (filtros.hasta)   params.set('fecha_hasta', filtros.hasta)
+    if (filtros.buscar)  params.set('buscar', filtros.buscar)
     api.listarEntregas(params.toString()).then(d => setEntregas(agruparPorFusion(d))).catch(() => setEntregas([]))
   }
 
@@ -238,13 +240,19 @@ function Dashboard({ irDetalle, onFusionar }) {
 
   useEffect(() => { cargar() }, [filtros])
 
+  // Debounce: espera a que el usuario deje de escribir antes de buscar
+  useEffect(() => {
+    const t = setTimeout(() => actualizarFiltro('buscar', buscarTexto), 400)
+    return () => clearTimeout(t)
+  }, [buscarTexto])
+
   const actualizarFiltro = (campo, valor) => setFiltros(f => ({ ...f, [campo]: valor }))
   const hayFiltrosActivos = Object.values(filtros).some(v => v)
   const grupos = entregas ? agruparPorMes(entregas) : []
 
   return (
     <div className="contenedor">
-      <div className="titulo-pag">Pulso del almacen</div>
+      <div className="titulo-pag">Inicio</div>
       <div className="sub-pag">Actividad y entregas recientes</div>
 
       <div className="stats">
@@ -267,12 +275,17 @@ function Dashboard({ irDetalle, onFusionar }) {
           <span className="filtros-icono">⚗</span> Filtros
           {hayFiltrosActivos && (
             <button className="btn-quitar-mini" style={{marginLeft:'auto'}}
-              onClick={() => setFiltros({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '' })}>
+              onClick={() => { setBuscarTexto(''); setFiltros({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '', buscar: '' }) }}>
               Limpiar filtros
             </button>
           )}
         </div>
         <div className="filtros-toolbar">
+          <div className="filtro-campo" style={{minWidth:220,flex:2}}>
+            <label>Buscar por folio, OV o traslado</label>
+            <input type="text" placeholder="Ej. CS-2608..., S104773, REM SYG/INT/00032"
+              value={buscarTexto} onChange={e => setBuscarTexto(e.target.value)} />
+          </div>
           <div className="filtro-campo">
             <label>Desde</label>
             <input type="date" value={filtros.desde} onChange={e => actualizarFiltro('desde', e.target.value)} />
@@ -382,7 +395,17 @@ function NuevaEntrega({ toast, irDetalle }) {
   const [ovs, setOvs] = useState(null)
   const [mostrarUsadas, setMostrarUsadas] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
+  const [buscarTexto, setBuscarTexto] = useState('')
+  const [resultadosBusqueda, setResultadosBusqueda] = useState(null)
   const fileRef = useRef()
+
+  useEffect(() => {
+    if (!buscarTexto.trim()) { setResultadosBusqueda(null); return }
+    const t = setTimeout(() => {
+      api.buscarEntregas(buscarTexto.trim()).then(setResultadosBusqueda).catch(() => setResultadosBusqueda([]))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [buscarTexto])
 
   useEffect(() => {
     api.odooSesion().then(s => {
@@ -419,6 +442,28 @@ function NuevaEntrega({ toast, irDetalle }) {
     <div className="contenedor">
       <div className="titulo-pag">Nueva entrega</div>
       <div className="sub-pag">Elige como va el embarque y de donde vienen los datos</div>
+
+      <div className="panel">
+        <div className="panel-titulo">Verificar si ya existe</div>
+        <input type="text" className="inp" placeholder="Buscar por folio, OV o traslado antes de crear... Ej. S104773, REM SYG/INT/00032"
+          value={buscarTexto} onChange={e => setBuscarTexto(e.target.value)} />
+        {resultadosBusqueda && (
+          resultadosBusqueda.length === 0 ? (
+            <div className="vacio" style={{padding:'14px 4px 0'}}>Sin coincidencias — puedes continuar creando la entrega.</div>
+          ) : (
+            <div className="lista-scroll" style={{marginTop:12}}>
+              {resultadosBusqueda.map(e => (
+                <div key={e.id_entrega} className="fila-ov" onClick={() => irDetalle(e.id_entrega)}>
+                  <span className="ov-num">{e.num_entrega}</span>
+                  <span className="ov-cliente">{e.nombre_cliente || e.orden || '—'}</span>
+                  <span className={'badge-sistema badge-' + e.sistema}>{e.sistema}</span>
+                  <span className={'badge-estatus badge-' + e.estatus}>{e.estatus}</span>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
 
       <div className="selector-sistema">
         {SISTEMAS.map(s => (
@@ -1246,7 +1291,7 @@ function VistaPacking({ toast }) {
 // ── MIGAJA DE CONTEXTO — siempre visible, incluso al imprimir ──
 function Migaja() {
   const { pathname } = useLocation()
-  const partes = ['Pulso']
+  const partes = ['Inicio']
   const seg = pathname.split('/').filter(Boolean) // ej: ['entregas','CS-123','etiquetas']
 
   if (pathname === '/nueva') partes.push('Nueva entrega')
@@ -1318,7 +1363,7 @@ export default function App() {
           <button className="topbar-marca" onClick={() => navigate('/')} title="Ir al inicio">GRUPO<span>CLER</span></button>
           <nav className="topbar-nav">
             <button className={'nav-btn' + (location.pathname === '/' ? ' activo' : '')}
-              onClick={() => navigate('/')}>Pulso</button>
+              onClick={() => navigate('/')}>Inicio</button>
             <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
               onClick={() => navigate('/nueva')}>Nueva entrega</button>
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
