@@ -148,6 +148,22 @@ export const rechazarSolicitud = (id, comentario = null) =>
 
 export const contarPendientes = () => req('/api/reimpresiones/pendientes-count')
 
+// ── CAMBIO DE SISTEMA (correccion TAR/CS/MIX) ────────────
+export const solicitarCambioSistema = (idEntrega, sistemaNuevo, motivo) =>
+  req(`/api/entregas/${idEntrega}/solicitar-cambio-sistema`, {
+    method: 'POST', body: JSON.stringify({ sistema_nuevo: sistemaNuevo, motivo })
+  })
+
+export const contarPendientesCambios = () => req('/api/reimpresiones/cambios-sistema/pendientes-count')
+
+export const listarCambiosSistema = () => req('/api/reimpresiones/cambios-sistema')
+
+export const aprobarCambioSistema = (id, comentario = null) =>
+  req(`/api/reimpresiones/cambios-sistema/${id}/aprobar`, { method: 'POST', body: JSON.stringify({ comentario }) })
+
+export const rechazarCambioSistema = (id, comentario = null) =>
+  req(`/api/reimpresiones/cambios-sistema/${id}/rechazar`, { method: 'POST', body: JSON.stringify({ comentario }) })
+
 export const obtenerEtiqueta = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/etiqueta`)
 
