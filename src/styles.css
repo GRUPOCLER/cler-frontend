@@ -188,6 +188,8 @@ input,select{font-family:var(--sans);}
 }
 .fila-ov:hover{background:var(--bg3);}
 .fila-ov:last-child{border-bottom:none;}
+.fila-ov-usada{opacity:.55;}
+.fila-ov-usada:hover{opacity:.85;}
 .ov-num{font-size:13px;font-weight:700;color:var(--amarillo);min-width:86px;}
 .ov-cliente{flex:1;font-size:12px;color:var(--text2);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
