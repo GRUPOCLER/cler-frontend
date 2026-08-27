@@ -380,6 +380,7 @@ function NuevaEntrega({ toast, irDetalle }) {
   const [sistema, setSistema] = useState('CS')
   const [odoo, setOdoo] = useState({ activa: false, usuario: '' })
   const [ovs, setOvs] = useState(null)
+  const [mostrarUsadas, setMostrarUsadas] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
   const fileRef = useRef()
 
@@ -391,6 +392,7 @@ function NuevaEntrega({ toast, irDetalle }) {
   }, [])
 
   const importarOdoo = async (ov) => {
+    if (ov.ya_importada) { irDetalle(ov.id_entrega_existente); return }
     try {
       toast('Cargando ' + ov.num_ov + ' desde Odoo...')
       const datos = await api.odooCargarEntrega(ov.picking_ids)
@@ -437,6 +439,12 @@ function NuevaEntrega({ toast, irDetalle }) {
           {odoo.activa
             ? <span className="chip chip-ok">Conectado · {odoo.usuario}</span>
             : <span className="chip chip-warn">Sin sesion</span>}
+          {odoo.activa && ovs && ovs.some(o => o.ya_importada) && (
+            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--text3)',cursor:'pointer'}}>
+              <input type="checkbox" checked={mostrarUsadas} onChange={e => setMostrarUsadas(e.target.checked)} />
+              Mostrar ya importadas
+            </label>
+          )}
         </div>
         {!odoo.activa ? (
           <div className="vacio">
@@ -446,18 +454,29 @@ function NuevaEntrega({ toast, irDetalle }) {
           </div>
         ) : !ovs ? <div className="cargando">Buscando OVs pendientes...</div>
           : ovs.length === 0 ? <div className="vacio">Sin OVs pendientes de Raiker o Korei.</div>
-          : (
-          <div className="lista-scroll">
-            {ovs.map(ov => (
-              <div key={ov.num_ov} className="fila-ov" onClick={() => importarOdoo(ov)}>
-                <span className="ov-num">{ov.num_ov}</span>
-                <span className="ov-cliente">{ov.cliente}</span>
-                <span className={'chip chip-' + ov.comercializador.toLowerCase()}>{ov.comercializador}</span>
-                <span className="ov-fecha">{ov.fecha}</span>
+          : (() => {
+            const visibles = mostrarUsadas ? ovs : ovs.filter(o => !o.ya_importada)
+            return visibles.length === 0 ? (
+              <div className="vacio">Todas las OVs pendientes ya fueron importadas.</div>
+            ) : (
+              <div className="lista-scroll">
+                {visibles.map(ov => (
+                  <div key={ov.num_ov} className={'fila-ov' + (ov.ya_importada ? ' fila-ov-usada' : '')}
+                    onClick={() => importarOdoo(ov)}
+                    title={ov.ya_importada ? `Ya importada como ${ov.sistema_existente} — clic para verla` : ''}>
+                    <span className="ov-num">{ov.num_ov}</span>
+                    <span className="ov-cliente">{ov.cliente}</span>
+                    {ov.ya_importada ? (
+                      <span className="chip chip-ok">Ya importada · {ov.sistema_existente}</span>
+                    ) : (
+                      <span className={'chip chip-' + ov.comercializador.toLowerCase()}>{ov.comercializador}</span>
+                    )}
+                    <span className="ov-fecha">{ov.fecha}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )
+          })()}
       </div>
 
       <div className="panel">
