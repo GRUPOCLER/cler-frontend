@@ -54,6 +54,45 @@ function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro
   )
 }
 
+// ── MODAL: CORREGIR SISTEMA (TAR/CS/MIX) ──────────────────
+function ModalCambioSistema({ sistemaActual, onClose, onConfirmar }) {
+  const opciones = [
+    { valor: 'TAR', nombre: 'Tarimas' },
+    { valor: 'CS',  nombre: 'Carga suelta' },
+    { valor: 'MIX', nombre: 'Mixto' },
+  ].filter(o => o.valor !== sistemaActual)
+  const [nuevo, setNuevo] = useState(opciones[0]?.valor || '')
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  const confirmar = async () => {
+    setEnviando(true)
+    await onConfirmar(nuevo, motivo.trim())
+    setEnviando(false)
+  }
+
+  return (
+    <Modal titulo="Corregir tipo de entrega" sub={`Actualmente: ${sistemaActual}`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" disabled={!motivo.trim() || enviando} onClick={confirmar}>
+          {enviando ? 'Enviando...' : 'Solicitar cambio'}
+        </button>
+      </>}>
+      <label className="dim-label">Cambiar a</label>
+      <select className="inp" style={{marginBottom:12}} value={nuevo} onChange={e => setNuevo(e.target.value)}>
+        {opciones.map(o => <option key={o.valor} value={o.valor}>{o.nombre}</option>)}
+      </select>
+      <label className="dim-label">Motivo de la correccion</label>
+      <textarea className="inp" rows={3} style={{resize:'vertical'}} value={motivo}
+        onChange={e => setMotivo(e.target.value)} autoFocus />
+      <p style={{fontSize:11,color:'var(--text3)',marginTop:10,lineHeight:1.5}}>
+        Si tu usuario no es Gerente o Administrador, esto crea una solicitud pendiente de autorizacion.
+      </p>
+    </Modal>
+  )
+}
+
 function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -674,6 +713,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const [modalCerrar, setModalCerrar] = useState(null)
   const [modalExt, setModalExt] = useState(null)
   const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
+  const [modalCambioSistema, setModalCambioSistema] = useState(false)
   const [modalSucursal, setModalSucursal] = useState(false)
   const [modalCliente, setModalCliente] = useState(false)
   const [abiertas, setAbiertas] = useState(new Set())
@@ -734,6 +774,18 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const reabrirEnt = async () => {
     try { await api.reabrirEntrega(id); toast('Entrega reabierta', 'ok'); cargar() }
     catch (e) { toast(e.message, 'error') }
+  }
+
+  const solicitarCambio = async (sistemaNuevo, motivo) => {
+    try {
+      const res = await api.solicitarCambioSistema(id, sistemaNuevo, motivo)
+      toast(res.aplicado ? 'Sistema actualizado' : 'Cambio aplicado', 'ok')
+      setModalCambioSistema(false); cargar()
+    } catch (e) {
+      setModalCambioSistema(false)
+      if (/[Ss]olicitud enviada/.test(e.message)) toast('Solicitud enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e.message, 'error')
+    }
   }
 
   const crearTarimaVacia = async (pesoPaletKg) => {
@@ -862,6 +914,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
               ? [{ label: 'Lista de empaque', onClick: () => verPacking(id) }] : []),
             ...(ent.estatus === 'completada'
               ? [{ label: 'Reabrir entrega', onClick: reabrirEnt }] : []),
+            { label: 'Corregir tipo de entrega', onClick: () => setModalCambioSistema(true) },
           ]} />
         </div>
       </div>
@@ -989,6 +1042,10 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
           textoConfirmar={modalConfirmar.peligro ? 'Eliminar' : 'Confirmar'} peligro={modalConfirmar.peligro}
           onClose={() => setModalConfirmar(null)}
           onConfirmar={async () => { await modalConfirmar.accion(); setModalConfirmar(null) }} />
+      )}
+      {modalCambioSistema && (
+        <ModalCambioSistema sistemaActual={ent.sistema}
+          onClose={() => setModalCambioSistema(false)} onConfirmar={solicitarCambio} />
       )}
       {modalSucursal && (
         <ModalSucursal actual={ent.sucursal} onClose={() => setModalSucursal(false)} onConfirmar={guardarSucursal} />
@@ -1174,7 +1231,7 @@ function Migaja() {
   const seg = pathname.split('/').filter(Boolean) // ej: ['entregas','CS-123','etiquetas']
 
   if (pathname === '/nueva') partes.push('Nueva entrega')
-  else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Reimpresiones') }
+  else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Autorizaciones') }
   else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
   else if (seg[0] === 'entregas' && seg[1]) {
     partes.push(seg[1])
@@ -1205,7 +1262,9 @@ export default function App() {
     if (!logueado) return
     const user0 = api.getUser()
     if (user0?.rol !== 'admin' && user0?.rol !== 'gerente') return
-    const check = () => api.contarPendientes().then(r => setPendientesReimpresion(r.pendientes)).catch(() => {})
+    const check = () => Promise.all([api.contarPendientes(), api.contarPendientesCambios()])
+      .then(([r1, r2]) => setPendientesReimpresion((r1.pendientes || 0) + (r2.pendientes || 0)))
+      .catch(() => {})
     check()
     const intervalo = setInterval(check, 15000)
     return () => clearInterval(intervalo)
@@ -1246,7 +1305,7 @@ export default function App() {
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
               <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
                 onClick={() => navigate('/reimpresiones')}>
-                Reimpresiones
+                Autorizaciones
                 {pendientesReimpresion > 0 && <span className="chip chip-warn" style={{marginLeft:6}}>{pendientesReimpresion}</span>}
               </button>
             )}
