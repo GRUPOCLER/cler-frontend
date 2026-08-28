@@ -196,3 +196,24 @@ export const odooListarOVs = () => req('/api/odoo/ovs')
 
 export const odooCargarEntrega = (pickingIds) =>
   req('/api/odoo/entrega', { method: 'POST', body: JSON.stringify(pickingIds) })
+
+// ── TRASPASOS INTERNOS (CEDIS, FULL MELI, Eventos y Expo) ──
+export const odooListarTraspasos = () => req('/api/odoo/traspasos')
+
+export const odooCargarTraspaso = (pickingId) =>
+  req('/api/odoo/traspaso?picking_id=' + pickingId, { method: 'POST' })
+
+// ── ADMINISTRACION DE ALMACENES DE TRASPASO (solo Admin) ───
+export const buscarAlmacenesOdoo = (nombre) =>
+  req('/api/odoo/almacenes-disponibles?nombre=' + encodeURIComponent(nombre || ''))
+
+export const listarAlmacenesConfigurados = () => req('/api/odoo/almacenes-traspaso')
+
+export const agregarAlmacen = (almacen) =>
+  req('/api/odoo/almacenes-traspaso', { method: 'POST', body: JSON.stringify(almacen) })
+
+export const editarAlmacen = (id, body) =>
+  req(`/api/odoo/almacenes-traspaso/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const quitarAlmacen = (id) =>
+  req(`/api/odoo/almacenes-traspaso/${id}`, { method: 'DELETE' })
