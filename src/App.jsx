@@ -394,6 +394,9 @@ function NuevaEntrega({ toast, irDetalle }) {
   const [odoo, setOdoo] = useState({ activa: false, usuario: '' })
   const [ovs, setOvs] = useState(null)
   const [mostrarUsadas, setMostrarUsadas] = useState(false)
+  const [modoOdoo, setModoOdoo] = useState('ovs') // 'ovs' | 'traspasos'
+  const [traspasos, setTraspasos] = useState(null)
+  const [mostrarUsadosTraspaso, setMostrarUsadosTraspaso] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
   const [buscarTexto, setBuscarTexto] = useState('')
   const [resultadosBusqueda, setResultadosBusqueda] = useState(null)
@@ -410,7 +413,10 @@ function NuevaEntrega({ toast, irDetalle }) {
   useEffect(() => {
     api.odooSesion().then(s => {
       setOdoo(s)
-      if (s.activa) api.odooListarOVs().then(setOvs).catch(() => setOvs([]))
+      if (s.activa) {
+        api.odooListarOVs().then(setOvs).catch(() => setOvs([]))
+        api.odooListarTraspasos().then(setTraspasos).catch(() => setTraspasos([]))
+      }
     })
   }, [])
 
@@ -419,6 +425,17 @@ function NuevaEntrega({ toast, irDetalle }) {
     try {
       toast('Cargando ' + ov.num_ov + ' desde Odoo...')
       const datos = await api.odooCargarEntrega(ov.picking_ids)
+      const res = await api.crearEntrega({ ...datos, sistema, fuente: 'odoo' })
+      toast(datos.productos.length + ' productos importados', 'ok')
+      irDetalle(res.id_entrega)
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const importarTraspaso = async (t) => {
+    if (t.ya_importada) { irDetalle(t.id_entrega_existente); return }
+    try {
+      toast('Cargando traspaso ' + t.folio + '...')
+      const datos = await api.odooCargarTraspaso(t.id)
       const res = await api.crearEntrega({ ...datos, sistema, fuente: 'odoo' })
       toast(datos.productos.length + ' productos importados', 'ok')
       irDetalle(res.id_entrega)
@@ -484,44 +501,97 @@ function NuevaEntrega({ toast, irDetalle }) {
           {odoo.activa
             ? <span className="chip chip-ok">Conectado · {odoo.usuario}</span>
             : <span className="chip chip-warn">Sin sesion</span>}
-          {odoo.activa && ovs && ovs.some(o => o.ya_importada) && (
-            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--text3)',cursor:'pointer'}}>
-              <input type="checkbox" checked={mostrarUsadas} onChange={e => setMostrarUsadas(e.target.checked)} />
-              Mostrar ya importadas
-            </label>
-          )}
         </div>
+
+        {odoo.activa && (
+          <div className="topbar-nav" style={{marginBottom:14}}>
+            <button className={'nav-btn' + (modoOdoo === 'ovs' ? ' activo' : '')} onClick={() => setModoOdoo('ovs')}>
+              OVs {ovs ? `(${ovs.length})` : ''}
+            </button>
+            <button className={'nav-btn' + (modoOdoo === 'traspasos' ? ' activo' : '')} onClick={() => setModoOdoo('traspasos')}>
+              Traspasos {traspasos ? `(${traspasos.length})` : ''}
+            </button>
+          </div>
+        )}
+
         {!odoo.activa ? (
           <div className="vacio">
             Inicia sesion en <a href="https://ecor-b2b-35977843.dev.odoo.com" target="_blank"
               rel="noreferrer" style={{color:'var(--amarillo)'}}>Odoo</a> en
             otra pestana y recarga esta pagina. Solo movimientos Raiker y Korei.
           </div>
-        ) : !ovs ? <div className="cargando">Buscando OVs pendientes...</div>
-          : ovs.length === 0 ? <div className="vacio">Sin OVs pendientes de Raiker o Korei.</div>
-          : (() => {
-            const visibles = mostrarUsadas ? ovs : ovs.filter(o => !o.ya_importada)
-            return visibles.length === 0 ? (
-              <div className="vacio">Todas las OVs pendientes ya fueron importadas.</div>
-            ) : (
-              <div className="lista-scroll">
-                {visibles.map(ov => (
-                  <div key={ov.num_ov} className={'fila-ov' + (ov.ya_importada ? ' fila-ov-usada' : '')}
-                    onClick={() => importarOdoo(ov)}
-                    title={ov.ya_importada ? `Ya importada como ${ov.sistema_existente} — clic para verla` : ''}>
-                    <span className="ov-num">{ov.num_ov}</span>
-                    <span className="ov-cliente">{ov.cliente}</span>
-                    {ov.ya_importada ? (
-                      <span className="chip chip-ok">Ya importada · {ov.sistema_existente}</span>
-                    ) : (
-                      <span className={'chip chip-' + ov.comercializador.toLowerCase()}>{ov.comercializador}</span>
-                    )}
-                    <span className="ov-fecha">{ov.fecha}</span>
+        ) : modoOdoo === 'ovs' ? (
+          <>
+            {ovs && ovs.some(o => o.ya_importada) && (
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--text3)',cursor:'pointer',marginBottom:10}}>
+                <input type="checkbox" checked={mostrarUsadas} onChange={e => setMostrarUsadas(e.target.checked)} />
+                Mostrar ya importadas
+              </label>
+            )}
+            {!ovs ? <div className="cargando">Buscando OVs pendientes...</div>
+              : ovs.length === 0 ? <div className="vacio">Sin OVs pendientes de Raiker o Korei.</div>
+              : (() => {
+                const visibles = mostrarUsadas ? ovs : ovs.filter(o => !o.ya_importada)
+                return visibles.length === 0 ? (
+                  <div className="vacio">Todas las OVs pendientes ya fueron importadas.</div>
+                ) : (
+                  <div className="lista-scroll">
+                    {visibles.map(ov => (
+                      <div key={ov.num_ov} className={'fila-ov' + (ov.ya_importada ? ' fila-ov-usada' : '')}
+                        onClick={() => importarOdoo(ov)}
+                        title={ov.ya_importada ? `Ya importada como ${ov.sistema_existente} — clic para verla` : ''}>
+                        <span className="ov-num">{ov.num_ov}</span>
+                        <span className="ov-cliente">{ov.cliente}</span>
+                        {ov.ya_importada ? (
+                          <span className="chip chip-ok">Ya importada · {ov.sistema_existente}</span>
+                        ) : (
+                          <span className={'chip chip-' + ov.comercializador.toLowerCase()}>{ov.comercializador}</span>
+                        )}
+                        <span className="ov-fecha">{ov.fecha}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )
-          })()}
+                )
+              })()}
+          </>
+        ) : (
+          <>
+            {traspasos && traspasos.some(t => t.ya_importada) && (
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--text3)',cursor:'pointer',marginBottom:10}}>
+                <input type="checkbox" checked={mostrarUsadosTraspaso} onChange={e => setMostrarUsadosTraspaso(e.target.checked)} />
+                Mostrar ya importados
+              </label>
+            )}
+            {!traspasos ? <div className="cargando">Buscando traspasos pendientes...</div>
+              : traspasos.length === 0 ? <div className="vacio">
+                  Sin traspasos pendientes hacia los almacenes vigilados. Si esperabas ver alguno, revisa
+                  Administracion → Almacenes de traspaso.
+                </div>
+              : (() => {
+                const visibles = mostrarUsadosTraspaso ? traspasos : traspasos.filter(t => !t.ya_importada)
+                return visibles.length === 0 ? (
+                  <div className="vacio">Todos los traspasos pendientes ya fueron importados.</div>
+                ) : (
+                  <div className="lista-scroll">
+                    {visibles.map(t => (
+                      <div key={t.id} className={'fila-ov' + (t.ya_importada ? ' fila-ov-usada' : '')}
+                        onClick={() => importarTraspaso(t)}
+                        title={t.ya_importada ? `Ya importado como ${t.sistema_existente} — clic para verlo` : `${t.origen} -> ${t.destino}`}>
+                        <span className="ov-num">{t.folio}</span>
+                        <span className="ov-cliente">{t.destino}</span>
+                        {t.ya_importada ? (
+                          <span className="chip chip-ok">Ya importado · {t.sistema_existente}</span>
+                        ) : (
+                          <span className="chip chip-warn">{t.estado}</span>
+                        )}
+                        <span className="ov-fecha">{t.fecha}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+          </>
+        )}
       </div>
 
       <div className="panel">
