@@ -461,12 +461,12 @@ function NuevaEntrega({ toast, irDetalle }) {
       <div className="sub-pag">Elige como va el embarque y de donde vienen los datos</div>
 
       <div className="panel">
-        <div className="panel-titulo">Verificar si ya existe</div>
-        <input type="text" className="inp" placeholder="Buscar por folio, OV o traslado antes de crear... Ej. S104773, REM SYG/INT/00032"
+        <div className="panel-titulo">Buscar movimiento</div>
+        <input type="text" className="inp" placeholder="Folio, OV o traslado — filtra tu sistema y la lista de Odoo de abajo"
           value={buscarTexto} onChange={e => setBuscarTexto(e.target.value)} />
         {resultadosBusqueda && (
           resultadosBusqueda.length === 0 ? (
-            <div className="vacio" style={{padding:'14px 4px 0'}}>Sin coincidencias — puedes continuar creando la entrega.</div>
+            <div className="vacio" style={{padding:'14px 4px 0'}}>Sin coincidencias en tu sistema — puedes continuar creando la entrega.</div>
           ) : (
             <div className="lista-scroll" style={{marginTop:12}}>
               {resultadosBusqueda.map(e => (
@@ -531,9 +531,18 @@ function NuevaEntrega({ toast, irDetalle }) {
             {!ovs ? <div className="cargando">Buscando OVs pendientes...</div>
               : ovs.length === 0 ? <div className="vacio">Sin OVs pendientes de Raiker o Korei.</div>
               : (() => {
-                const visibles = mostrarUsadas ? ovs : ovs.filter(o => !o.ya_importada)
+                const termino = buscarTexto.trim().toLowerCase()
+                let visibles = mostrarUsadas ? ovs : ovs.filter(o => !o.ya_importada)
+                if (termino) {
+                  visibles = visibles.filter(o =>
+                    (o.num_ov || '').toLowerCase().includes(termino) ||
+                    (o.cliente || '').toLowerCase().includes(termino)
+                  )
+                }
                 return visibles.length === 0 ? (
-                  <div className="vacio">Todas las OVs pendientes ya fueron importadas.</div>
+                  <div className="vacio">
+                    {termino ? `Sin coincidencias en Odoo para "${buscarTexto}".` : 'Todas las OVs pendientes ya fueron importadas.'}
+                  </div>
                 ) : (
                   <div className="lista-scroll">
                     {visibles.map(ov => (
@@ -568,9 +577,20 @@ function NuevaEntrega({ toast, irDetalle }) {
                   Administracion → Almacenes de traspaso.
                 </div>
               : (() => {
-                const visibles = mostrarUsadosTraspaso ? traspasos : traspasos.filter(t => !t.ya_importada)
+                const termino = buscarTexto.trim().toLowerCase()
+                let visibles = mostrarUsadosTraspaso ? traspasos : traspasos.filter(t => !t.ya_importada)
+                if (termino) {
+                  visibles = visibles.filter(t =>
+                    (t.folio || '').toLowerCase().includes(termino) ||
+                    (t.destino || '').toLowerCase().includes(termino) ||
+                    (t.origen || '').toLowerCase().includes(termino) ||
+                    (t.referencia || '').toLowerCase().includes(termino)
+                  )
+                }
                 return visibles.length === 0 ? (
-                  <div className="vacio">Todos los traspasos pendientes ya fueron importados.</div>
+                  <div className="vacio">
+                    {termino ? `Sin coincidencias en Odoo para "${buscarTexto}".` : 'Todos los traspasos pendientes ya fueron importados.'}
+                  </div>
                 ) : (
                   <div className="lista-scroll">
                     {visibles.map(t => (
