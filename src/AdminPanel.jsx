@@ -97,6 +97,110 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
   )
 }
 
+// ── ALMACENES DE TRASPASO (busca en Odoo, agrega/quita) ──
+function PanelAlmacenes({ toast }) {
+  const [configurados, setConfigurados] = useState(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [resultados, setResultados] = useState(null)
+  const [buscando, setBuscando] = useState(false)
+
+  const cargarConfigurados = () => api.listarAlmacenesConfigurados().then(setConfigurados).catch(e => toast(e.message, 'error'))
+
+  useEffect(() => { cargarConfigurados() }, [])
+
+  const buscar = async () => {
+    setBuscando(true)
+    try { setResultados(await api.buscarAlmacenesOdoo(busqueda)) }
+    catch (e) { toast(e.message, 'error') }
+    finally { setBuscando(false) }
+  }
+
+  const agregar = async (a) => {
+    try {
+      await api.agregarAlmacen({
+        odoo_warehouse_id: a.id, odoo_location_id: a.location_id,
+        nombre: a.nombre, codigo: a.codigo
+      })
+      toast('Almacen agregado: ' + a.nombre, 'ok')
+      cargarConfigurados()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const toggleActivo = async (a) => {
+    try { await api.editarAlmacen(a.id, { activo: !a.activo }); cargarConfigurados() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const quitar = async (a) => {
+    if (!confirm(`¿Quitar "${a.nombre}" de los almacenes vigilados?`)) return
+    try { await api.quitarAlmacen(a.id); toast('Almacen quitado', 'ok'); cargarConfigurados() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const idsYaConfigurados = new Set((configurados || []).map(a => a.odoo_warehouse_id))
+
+  return (
+    <>
+      <div className="panel">
+        <div className="panel-titulo">
+          Almacenes vigilados<span className="chip chip-ok">{configurados ? configurados.length : '…'}</span>
+        </div>
+        <p style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>
+          Solo los traspasos con destino a estos almacenes apareceran en la pestana "Traspasos" de Nueva entrega.
+        </p>
+        {!configurados ? <div className="cargando">Cargando...</div>
+          : configurados.length === 0 ? <div className="vacio">Ninguno configurado todavia — busca abajo y agrega.</div>
+          : (
+          <table className="tabla">
+            <thead><tr><th>Nombre</th><th>Codigo</th><th>Estatus</th><th>Agrego</th><th></th></tr></thead>
+            <tbody>
+              {configurados.map(a => (
+                <tr key={a.id}>
+                  <td style={{fontWeight:700}}>{a.nombre}</td>
+                  <td>{a.codigo}</td>
+                  <td><span className={a.activo ? 'chip chip-ok' : 'chip chip-warn'}>{a.activo ? 'activo' : 'pausado'}</span></td>
+                  <td style={{fontSize:12,color:'var(--text3)'}}>{a.agregado_por}</td>
+                  <td style={{display:'flex',gap:6}}>
+                    <button className="btn-quitar-mini" onClick={() => toggleActivo(a)}>{a.activo ? 'Pausar' : 'Activar'}</button>
+                    <button className="btn-quitar-mini" onClick={() => quitar(a)}>Quitar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="panel">
+        <div className="panel-titulo">Buscar almacen en Odoo</div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input type="text" className="inp" placeholder="Ej. CEDIS, Expo, Meli..."
+            value={busqueda} onChange={e => setBusqueda(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && buscar()} />
+          <button className="btn-principal" onClick={buscar} disabled={buscando}>{buscando ? 'Buscando...' : 'Buscar'}</button>
+        </div>
+        {resultados && (
+          resultados.length === 0 ? <div className="vacio">Sin resultados.</div> : (
+            <div className="lista-scroll">
+              {resultados.map(a => (
+                <div key={a.id} className="fila-ov">
+                  <span className="ov-num">{a.codigo}</span>
+                  <span className="ov-cliente">{a.nombre}</span>
+                  {idsYaConfigurados.has(a.id) ? (
+                    <span className="chip chip-ok">Ya agregado</span>
+                  ) : (
+                    <button className="btn-mini btn-mini-primario" onClick={() => agregar(a)}>+ Agregar</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </>
+  )
+}
+
 // ── PANEL DE ADMINISTRACION (solo Admin: usuarios + bitacora) ───
 export default function AdminPanel({ toast, miRol }) {
   const [tab, setTab] = useState('usuarios')
@@ -137,8 +241,11 @@ export default function AdminPanel({ toast, miRol }) {
 
       <div className="topbar-nav" style={{marginBottom:20}}>
         <button className={'nav-btn' + (tab === 'usuarios' ? ' activo' : '')} onClick={() => setTab('usuarios')}>Usuarios</button>
+        <button className={'nav-btn' + (tab === 'almacenes' ? ' activo' : '')} onClick={() => setTab('almacenes')}>Almacenes de traspaso</button>
         <button className={'nav-btn' + (tab === 'logs' ? ' activo' : '')} onClick={() => setTab('logs')}>Bitacora</button>
       </div>
+
+      {tab === 'almacenes' && <PanelAlmacenes toast={toast} />}
 
       {tab === 'usuarios' && (
         <div className="panel">
