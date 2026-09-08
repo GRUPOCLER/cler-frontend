@@ -94,8 +94,8 @@ export const agregarExtension = (idEntrega, idProducto, cantidad) =>
     body: JSON.stringify({ cantidad })
   })
 
-export const obtenerEtiquetasSueltas = (idEntrega) =>
-  req(`/api/entregas/${idEntrega}/etiquetas-sueltas`)
+export const obtenerEtiquetasSueltas = (idEntrega, skusMaster = []) =>
+  req(`/api/entregas/${idEntrega}/etiquetas-sueltas` + (skusMaster.length ? '?master=' + encodeURIComponent(skusMaster.join(',')) : ''))
 
 // ── FUSION DE ENTREGAS Y LISTA DE EMPAQUE ────────────────
 export const candidatasFusion = () => req('/api/entregas/candidatas-fusion')
