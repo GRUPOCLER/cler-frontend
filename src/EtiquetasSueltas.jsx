@@ -27,6 +27,9 @@ function PaginaEtiquetaSuelta({ d }) {
       </div>
 
       <div className="et-suelta-desc">{d.descripcion}</div>
+      {d.caja_master && d.total_cajas_sku > 1 && (
+        <div className="et-suelta-caja">Caja {d.num_caja} de {d.total_cajas_sku}</div>
+      )}
 
       <div className="et-suelta-mid">
         <span className="et-suelta-cliente">{d.nombre_cliente}</span>
