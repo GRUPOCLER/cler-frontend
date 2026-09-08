@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import * as api from './api.js'
 import Etiquetas from './Etiquetas.jsx'
 import EtiquetasSueltas from './EtiquetasSueltas.jsx'
@@ -37,6 +37,41 @@ function MenuAcciones({ acciones }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ── MODAL: ELEGIR QUE PRODUCTOS VAN EN CAJA MASTER ────────
+function ModalCajaMaster({ candidatos, onClose, onConfirmar }) {
+  const [seleccionados, setSeleccionados] = useState(new Set())
+  const toggle = (clave) => setSeleccionados(prev => {
+    const s = new Set(prev)
+    s.has(clave) ? s.delete(clave) : s.add(clave)
+    return s
+  })
+
+  return (
+    <Modal titulo="Caja master" sub="Elige que productos van empacados en caja master — el resto se imprime por pieza" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar(Array.from(seleccionados))}>
+          Generar etiquetas
+        </button>
+      </>}>
+      <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:320,overflowY:'auto'}}>
+        {candidatos.map(p => (
+          <label key={p.id_producto} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'var(--bg3)',borderRadius:8,cursor:'pointer'}}>
+            <input type="checkbox" checked={seleccionados.has(p.clave)} onChange={() => toggle(p.clave)} />
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:13}}>{p.clave}</div>
+              <div style={{fontSize:11,color:'var(--text3)'}}>{p.descripcion}</div>
+            </div>
+            <div style={{fontSize:11,color:'var(--text3)',textAlign:'right'}}>
+              {p.cantidad_pendiente} pzas<br/>x{p.cm_cant}/caja
+            </div>
+          </label>
+        ))}
+      </div>
+    </Modal>
   )
 }
 
@@ -868,6 +903,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const [modalExt, setModalExt] = useState(null)
   const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
   const [modalCambioSistema, setModalCambioSistema] = useState(false)
+  const [modalCajaMaster, setModalCajaMaster] = useState(null) // { candidatos } | null
   const [modalSucursal, setModalSucursal] = useState(false)
   const [modalCliente, setModalCliente] = useState(false)
   const [abiertas, setAbiertas] = useState(new Set())
@@ -928,6 +964,12 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const reabrirEnt = async () => {
     try { await api.reabrirEntrega(id); toast('Entrega reabierta', 'ok'); cargar() }
     catch (e) { toast(e.message, 'error') }
+  }
+
+  const abrirEtiquetasSueltas = () => {
+    const candidatos = productos.filter(p => p.cantidad_pendiente > 0 && p.cm_cant > 0)
+    if (candidatos.length === 0) { verEtiquetasSueltas(id); return }
+    setModalCajaMaster({ candidatos })
   }
 
   const solicitarCambio = async (sistemaNuevo, motivo) => {
@@ -1061,7 +1103,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
             <button className="btn-principal" onClick={completar}>Completar entrega</button>}
           <MenuAcciones acciones={[
             ...(productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX')
-              ? [{ label: 'Imprimir etiquetas sueltas', onClick: () => verEtiquetasSueltas(id) }] : []),
+              ? [{ label: 'Imprimir etiquetas sueltas', onClick: abrirEtiquetasSueltas }] : []),
             ...(tarimas.some(t => t.estatus === 'cerrada')
               ? [{ label: 'Ver etiquetas de tarima', onClick: () => verEtiquetas(id) }] : []),
             ...(tarimas.some(t => t.estatus === 'cerrada') || ent.estatus === 'completada'
@@ -1201,6 +1243,11 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
         <ModalCambioSistema sistemaActual={ent.sistema}
           onClose={() => setModalCambioSistema(false)} onConfirmar={solicitarCambio} />
       )}
+      {modalCajaMaster && (
+        <ModalCajaMaster candidatos={modalCajaMaster.candidatos}
+          onClose={() => setModalCajaMaster(null)}
+          onConfirmar={(skus) => { setModalCajaMaster(null); verEtiquetasSueltas(id, skus) }} />
+      )}
       {modalSucursal && (
         <ModalSucursal actual={ent.sucursal} onClose={() => setModalSucursal(false)} onConfirmar={guardarSucursal} />
       )}
@@ -1276,12 +1323,14 @@ function VistaEtiquetas({ toast }) {
 function VistaEtiquetasSueltas({ toast }) {
   const { id: idEntrega } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const skusMaster = (searchParams.get('master') || '').split(',').filter(Boolean)
   const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null)
 
   useEffect(() => {
-    api.obtenerEtiquetasSueltas(idEntrega).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+    api.obtenerEtiquetasSueltas(idEntrega, skusMaster).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
   }, [idEntrega])
 
   if (!datos) return <div className="cargando">Generando etiquetas...</div>
@@ -1430,7 +1479,8 @@ export default function App() {
   const irDetalle = (id) => navigate(`/entregas/${id}`)
   const verEtiquetas = (idEnt, idTar = null) =>
     navigate(idTar ? `/entregas/${idEnt}/etiquetas/${idTar}` : `/entregas/${idEnt}/etiquetas`)
-  const verEtiquetasSueltas = (idEnt) => navigate(`/entregas/${idEnt}/etiquetas-sueltas`)
+  const verEtiquetasSueltas = (idEnt, skusMaster = []) =>
+    navigate(`/entregas/${idEnt}/etiquetas-sueltas` + (skusMaster.length ? `?master=${encodeURIComponent(skusMaster.join(','))}` : ''))
   const verPacking = (idEnt) => navigate(`/entregas/${idEnt}/packing`)
 
   const confirmarFusion = async (idsSeleccionados) => {
