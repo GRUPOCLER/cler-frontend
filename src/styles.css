@@ -550,6 +550,7 @@ input,select{font-family:var(--sans);}
   font-size:9px;color:#111;line-height:1.2;
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
 }
+.et-suelta-caja{font-size:8px;font-weight:800;color:#0a6b4a;}
 .et-suelta-dir{
   font-size:7.5px;color:#444;line-height:1.15;
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
