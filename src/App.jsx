@@ -501,6 +501,13 @@ function NuevaEntrega({ toast, irDetalle }) {
           {odoo.activa
             ? <span className="chip chip-ok">Conectado · {odoo.usuario}</span>
             : <span className="chip chip-warn">Sin sesion</span>}
+          {odoo.activa && (
+            <button className="btn-quitar-mini" style={{marginLeft:'auto'}} onClick={() => {
+              setOvs(null); setTraspasos(null)
+              api.odooListarOVs().then(setOvs).catch(() => setOvs([]))
+              api.odooListarTraspasos().then(setTraspasos).catch(() => setTraspasos([]))
+            }}>Actualizar desde Odoo</button>
+          )}
         </div>
 
         {odoo.activa && (
@@ -532,7 +539,9 @@ function NuevaEntrega({ toast, irDetalle }) {
               : ovs.length === 0 ? <div className="vacio">Sin OVs pendientes de Raiker o Korei.</div>
               : (() => {
                 const termino = buscarTexto.trim().toLowerCase()
-                let visibles = mostrarUsadas ? ovs : ovs.filter(o => !o.ya_importada)
+                // Al buscar algo especifico, se ignora el filtro de "ocultar ya importadas"
+                // — si estas buscando una OV puntual, debe aparecer sin importar su estatus.
+                let visibles = (mostrarUsadas || termino) ? ovs : ovs.filter(o => !o.ya_importada)
                 if (termino) {
                   visibles = visibles.filter(o =>
                     (o.num_ov || '').toLowerCase().includes(termino) ||
@@ -578,7 +587,7 @@ function NuevaEntrega({ toast, irDetalle }) {
                 </div>
               : (() => {
                 const termino = buscarTexto.trim().toLowerCase()
-                let visibles = mostrarUsadosTraspaso ? traspasos : traspasos.filter(t => !t.ya_importada)
+                let visibles = (mostrarUsadosTraspaso || termino) ? traspasos : traspasos.filter(t => !t.ya_importada)
                 if (termino) {
                   visibles = visibles.filter(t =>
                     (t.folio || '').toLowerCase().includes(termino) ||
