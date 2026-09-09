@@ -3,7 +3,8 @@
 // ============================================================
 
 export default function ListaEmpaque({ datos }) {
-  const { entrega, es_fusion, entregas_involucradas, remitente, tarimas, sueltos, total_bultos, total_piezas, peso_palet_total_kg } = datos
+  const { entrega, es_fusion, entregas_involucradas, remitente, tarimas, sueltos, total_bultos, total_piezas,
+    peso_palet_total_kg, peso_mercancia_kg, peso_total_kg } = datos
 
   const folios = es_fusion ? entregas_involucradas.map(e => e.num_entrega).filter(Boolean).join(' + ') : entrega.num_entrega
   const ovs    = es_fusion ? entregas_involucradas.map(e => e.orden).filter(Boolean).join(' + ') : (entrega.orden || '-')
@@ -72,7 +73,9 @@ export default function ListaEmpaque({ datos }) {
                 </th>
                 <th className="pk-bulto-meta" colSpan={3}>
                   Piezas: <b>{t.total_piezas}</b>
+                  {t.peso_neto_kg > 0 && <> &nbsp;|&nbsp; Peso mercancia: <b>{t.peso_neto_kg} kg</b></>}
                   {t.peso_palet_kg > 0 && <> &nbsp;|&nbsp; Palet: <b>{t.peso_palet_kg} kg</b></>}
+                  {t.peso_bruto_kg > 0 && <> &nbsp;|&nbsp; Bruto: <b>{t.peso_bruto_kg} kg</b></>}
                   {t.largo_cm > 0 && t.ancho_cm > 0 && t.alto_cm > 0 &&
                     <> &nbsp;|&nbsp; Medidas: <b>{t.largo_cm}×{t.ancho_cm}×{t.alto_cm} cm</b></>}
                 </th>
@@ -82,6 +85,7 @@ export default function ListaEmpaque({ datos }) {
                 <th style={{textAlign:'left'}}>Descripción</th>
                 <th style={{textAlign:'right'}}>Cant.</th>
                 <th style={{textAlign:'center'}}>Unidad</th>
+                <th style={{textAlign:'right'}}>Peso</th>
               </tr>
             </thead>
             <tbody>
@@ -91,9 +95,10 @@ export default function ListaEmpaque({ datos }) {
                   <td>{p.descripcion}</td>
                   <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_asignada}</td>
                   <td style={{textAlign:'center',color:'#555'}}>{p.unidad}</td>
+                  <td style={{textAlign:'right',color:'#555',fontSize:11}}>{p.peso_kg > 0 ? `${p.peso_kg} kg` : '-'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={4} style={{color:'#888',padding:6}}>Sin productos</td></tr>
+                <tr><td colSpan={5} style={{color:'#888',padding:6}}>Sin productos</td></tr>
               )}
             </tbody>
           </table>
@@ -116,6 +121,7 @@ export default function ListaEmpaque({ datos }) {
                 <th style={{textAlign:'left'}}>Descripción</th>
                 <th style={{textAlign:'right'}}>Cant.</th>
                 <th style={{textAlign:'center'}}>Unidad</th>
+                <th style={{textAlign:'right'}}>Peso</th>
               </tr>
             </thead>
             <tbody>
@@ -124,6 +130,7 @@ export default function ListaEmpaque({ datos }) {
                 <td>{p.descripcion}</td>
                 <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_pendiente ?? p.cantidad_total}</td>
                 <td style={{textAlign:'center',color:'#555'}}>{p.unidad}</td>
+                <td style={{textAlign:'right',color:'#555',fontSize:11}}>{p.peso_kg > 0 ? `${p.peso_kg} kg` : '-'}</td>
               </tr>
             </tbody>
           </table>
@@ -132,7 +139,7 @@ export default function ListaEmpaque({ datos }) {
 
       <table className="pk-tabla-totales">
         <tbody>
-          <tr className="pk-totales-head"><td colSpan={3}>Totales Generales</td></tr>
+          <tr className="pk-totales-head"><td colSpan={5}>Totales Generales</td></tr>
           <tr>
             <td className="pk-total-cell">
               <div className="pk-label">Total bultos</div>
@@ -143,8 +150,16 @@ export default function ListaEmpaque({ datos }) {
               <div className="pk-total-num">{total_piezas}</div>
             </td>
             <td className="pk-total-cell">
+              <div className="pk-label">Peso mercancia</div>
+              <div className="pk-total-num-sm">{peso_mercancia_kg > 0 ? `${peso_mercancia_kg} kg` : '-'}</div>
+            </td>
+            <td className="pk-total-cell">
               <div className="pk-label">Peso pallets</div>
               <div className="pk-total-num-sm">{peso_palet_total_kg > 0 ? `${peso_palet_total_kg} kg` : '-'}</div>
+            </td>
+            <td className="pk-total-cell">
+              <div className="pk-label">Peso total</div>
+              <div className="pk-total-num-sm">{peso_total_kg > 0 ? `${peso_total_kg} kg` : '-'}</div>
             </td>
           </tr>
         </tbody>
