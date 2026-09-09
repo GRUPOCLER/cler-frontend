@@ -217,3 +217,12 @@ export const editarAlmacen = (id, body) =>
 
 export const quitarAlmacen = (id) =>
   req(`/api/odoo/almacenes-traspaso/${id}`, { method: 'DELETE' })
+
+// ── ALMACENES AUTORIZADOS POR USUARIO (visibilidad OVs) ─────
+export const listarAlmacenesUsuario = (usuario) => req(`/api/odoo/usuarios-almacenes/${usuario}`)
+
+export const agregarAlmacenUsuario = (usuario, almacen) =>
+  req(`/api/odoo/usuarios-almacenes/${usuario}`, { method: 'POST', body: JSON.stringify(almacen) })
+
+export const quitarAlmacenUsuario = (idAsignacion) =>
+  req(`/api/odoo/usuarios-almacenes/${idAsignacion}`, { method: 'DELETE' })
