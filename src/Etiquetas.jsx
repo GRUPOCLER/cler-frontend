@@ -27,7 +27,7 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
   const hayPesos = d.peso_neto_kg > 0 || d.peso_palet_kg > 0 || d.peso_bruto_kg > 0
   const tieneDims = d.largo_cm > 0 && d.ancho_cm > 0 && d.alto_cm > 0
   const totalMostrado = d.es_mix ? (d.total_bultos ?? d.total_tarimas) : d.total_tarimas
-  const textoTotal = d.es_mix ? 'bultos' : 'tarimas'
+  const textoTotal = 'bultos'
 
   return (
     <div className="et-pagina">
@@ -37,7 +37,7 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
           <div className="et-remitente">{d.remitente}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div className="et-label-sm">Bulto</div>
+          <div className="et-label-sm">{d.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'}</div>
           <div className="et-bulto-num">{numLabel}</div>
           <div className="et-bulto-de">de {totalMostrado} {textoTotal}</div>
         </div>
