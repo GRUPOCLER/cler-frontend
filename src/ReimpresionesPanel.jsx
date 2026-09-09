@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import * as api from './api.js'
 import { Modal } from './App.jsx'
 
+const TIPO_LABEL = { TARIMA: 'Carga agrupada', SUELTAS: 'Carga suelta', PACKING: 'Lista de empaque' }
+
 function ModalResolver({ solicitud, accion, onClose, onConfirmar }) {
   const [comentario, setComentario] = useState('')
   const esAprobar = accion === 'aprobar'
   return (
     <Modal titulo={esAprobar ? 'Aprobar reimpresion' : 'Rechazar reimpresion'}
-      sub={`${solicitud.tipo} — ${solicitud.num_entrega || solicitud.referencia}`} onClose={onClose}
+      sub={`${TIPO_LABEL[solicitud.tipo] || solicitud.tipo} — ${solicitud.num_entrega || solicitud.referencia}`} onClose={onClose}
       footer={<>
         <button className="btn-sec" onClick={onClose}>Cancelar</button>
         <button className={esAprobar ? 'btn-principal' : 'btn-mini'} onClick={() => onConfirmar(comentario)}>
@@ -104,7 +106,7 @@ export default function ReimpresionesPanel({ toast }) {
               {pendientes.map(s => (
                 <tr key={s.id}>
                   <td style={{fontSize:11,color:'var(--text3)'}}>{(s.fecha_solicitud || '').substring(0,16)}</td>
-                  <td><span className="chip chip-warn">{s.tipo}</span></td>
+                  <td><span className="chip chip-warn">{TIPO_LABEL[s.tipo] || s.tipo}</span></td>
                   <td style={{fontWeight:700}}>{s.num_entrega || s.referencia}</td>
                   <td>{s.solicitado_por}</td>
                   <td style={{color:'var(--text2)',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.motivo}</td>
@@ -154,7 +156,7 @@ export default function ReimpresionesPanel({ toast }) {
               {resueltas.slice(0, 30).map(s => (
                 <tr key={s.id}>
                   <td style={{fontSize:11,color:'var(--text3)'}}>{(s.fecha_resolucion || s.fecha_solicitud || '').substring(0,16)}</td>
-                  <td><span className="chip chip-ok">{s.tipo}</span></td>
+                  <td><span className="chip chip-ok">{TIPO_LABEL[s.tipo] || s.tipo}</span></td>
                   <td style={{fontWeight:700}}>{s.num_entrega || s.referencia}</td>
                   <td>{s.solicitado_por}</td>
                   <td><span className={s.estatus === 'aprobada' || s.estatus === 'usada' ? 'chip chip-ok' : 'chip chip-warn'}>{s.estatus}</span></td>
