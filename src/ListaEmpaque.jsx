@@ -68,7 +68,7 @@ export default function ListaEmpaque({ datos }) {
               <tr className="pk-bulto-head">
                 <th colSpan={t.productos.length ? 1 : 1} className="pk-bulto-titulo">
                   BULTO {t.numero_bulto} / {t.total_bultos}
-                  <span className="pk-bulto-id">Tarima {t.numero_tarima} — {t.id_tarima}</span>
+                  <span className="pk-bulto-id">{t.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'} {t.numero_tarima} — {t.id_tarima}</span>
                 </th>
                 <th className="pk-bulto-meta" colSpan={3}>
                   Piezas: <b>{t.total_piezas}</b>
