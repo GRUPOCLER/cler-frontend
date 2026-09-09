@@ -202,11 +202,98 @@ function PanelAlmacenes({ toast }) {
 }
 
 // ── PANEL DE ADMINISTRACION (solo Admin: usuarios + bitacora) ───
+// ── MODAL: ALMACENES AUTORIZADOS DEL USUARIO ─────────────
+function ModalAlmacenesUsuario({ usuario, onClose, toast }) {
+  const [asignados, setAsignados] = useState(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [resultados, setResultados] = useState(null)
+  const [buscando, setBuscando] = useState(false)
+
+  const cargarAsignados = () => api.listarAlmacenesUsuario(usuario).then(setAsignados).catch(e => toast(e.message, 'error'))
+
+  useEffect(() => { cargarAsignados() }, [])
+
+  const buscar = async () => {
+    setBuscando(true)
+    try { setResultados(await api.buscarAlmacenesOdoo(busqueda)) }
+    catch (e) { toast(e.message, 'error') }
+    finally { setBuscando(false) }
+  }
+
+  const agregar = async (a) => {
+    try {
+      await api.agregarAlmacenUsuario(usuario, { odoo_warehouse_id: a.id, nombre: a.nombre, codigo: a.codigo })
+      toast('Almacen asignado', 'ok')
+      cargarAsignados()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const quitar = async (a) => {
+    try { await api.quitarAlmacenUsuario(a.id); toast('Almacen quitado', 'ok'); cargarAsignados() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const idsYaAsignados = new Set((asignados || []).map(a => a.odoo_warehouse_id))
+
+  return (
+    <Modal titulo="Almacenes autorizados" sub={`Usuario: ${usuario}`} onClose={onClose}
+      footer={<button className="btn-sec" onClick={onClose}>Cerrar</button>}>
+      <div style={{fontSize:11,color:'var(--text3)',marginBottom:14,lineHeight:1.5}}>
+        Si no asignas ninguno, este usuario ve todas las OVs de Odoo sin restriccion.
+        En cuanto agregues al menos uno, solo vera OVs de esos almacenes.
+      </div>
+
+      <div className="panel-titulo" style={{fontSize:12}}>
+        Asignados<span className="chip chip-ok">{asignados ? asignados.length : '…'}</span>
+      </div>
+      {!asignados ? <div className="cargando">Cargando...</div>
+        : asignados.length === 0 ? <div className="vacio">Ninguno — sin restriccion.</div>
+        : (
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
+          {asignados.map(a => (
+            <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 10px',background:'var(--bg3)',borderRadius:6}}>
+              <span style={{fontWeight:700,fontSize:12,flex:1}}>{a.nombre}</span>
+              <span style={{fontSize:11,color:'var(--text3)'}}>{a.codigo}</span>
+              <button className="btn-quitar-mini" onClick={() => quitar(a)}>Quitar</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="panel-titulo" style={{fontSize:12,marginTop:6}}>Buscar almacen en Odoo</div>
+      <div style={{display:'flex',gap:8,marginBottom:12}}>
+        <input type="text" className="inp" placeholder="Ej. MAY-MAQ, CDIS..."
+          value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && buscar()} />
+        <button className="btn-principal" onClick={buscar} disabled={buscando}>{buscando ? '...' : 'Buscar'}</button>
+      </div>
+      {resultados && (
+        resultados.length === 0 ? <div className="vacio">Sin resultados.</div> : (
+          <div className="lista-scroll">
+            {resultados.map(a => (
+              <div key={a.id} className="fila-ov">
+                <span className="ov-num">{a.codigo}</span>
+                <span className="ov-cliente">{a.nombre}</span>
+                {idsYaAsignados.has(a.id) ? (
+                  <span className="chip chip-ok">Ya asignado</span>
+                ) : (
+                  <button className="btn-mini btn-mini-primario" onClick={() => agregar(a)}>+ Agregar</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </Modal>
+  )
+}
+
 export default function AdminPanel({ toast, miRol }) {
   const [tab, setTab] = useState('usuarios')
   const [usuarios, setUsuarios] = useState(null)
   const [logs, setLogs] = useState(null)
   const [modalUsuario, setModalUsuario] = useState(undefined)
+  const [modalAlmacenesUsuario, setModalAlmacenesUsuario] = useState(null) // nombre de usuario | null
 
   const cargarUsuarios = () => api.listarUsuarios().then(setUsuarios).catch(e => toast(e.message, 'error'))
   const cargarLogs     = () => api.verLogs().then(setLogs).catch(e => toast(e.message, 'error'))
@@ -269,7 +356,10 @@ export default function AdminPanel({ toast, miRol }) {
                     <td><span className={'chip ' + chipRol(u.rol)}>{u.rol}</span></td>
                     <td><span className={u.activo ? 'chip chip-ok' : 'chip chip-warn'}>{u.activo ? 'activo' : 'inactivo'}</span></td>
                     <td style={{fontSize:11,color:'var(--text3)'}}>{(u.ultimo_acceso || '—').substring(0,16)}</td>
-                    <td><button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalUsuario(u) }}>Editar</button></td>
+                    <td style={{display:'flex',gap:6}}>
+                      <button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalUsuario(u) }}>Editar</button>
+                      <button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalAlmacenesUsuario(u.usuario) }}>Almacenes</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -306,6 +396,10 @@ export default function AdminPanel({ toast, miRol }) {
         <ModalUsuario usuarioActual={modalUsuario} miRol={miRol} toast={toast}
           onClose={() => setModalUsuario(undefined)}
           onGuardado={() => { setModalUsuario(undefined); cargarUsuarios() }} />
+      )}
+      {modalAlmacenesUsuario && (
+        <ModalAlmacenesUsuario usuario={modalAlmacenesUsuario} toast={toast}
+          onClose={() => setModalAlmacenesUsuario(null)} />
       )}
     </div>
   )
