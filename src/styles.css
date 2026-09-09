@@ -567,6 +567,7 @@ input,select{font-family:var(--sans);}
 .et-suelta-cant-wrap{display:flex;align-items:baseline;gap:4px;}
 .et-suelta-cant{font-size:26px;font-weight:900;color:#000;line-height:1;}
 .et-suelta-unidad{font-size:9px;color:#444;text-transform:uppercase;}
+.et-suelta-peso{font-size:9px;color:#666;margin-left:4px;}
 .et-suelta-bc-wrap{text-align:right;flex-shrink:0;}
 .et-suelta-bc-img{height:22px;display:block;margin-left:auto;}
 .et-suelta-bc-txt{font-family:monospace;font-size:6.5px;color:#000;margin-top:1px;}
