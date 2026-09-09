@@ -57,7 +57,7 @@ function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro
 // ── MODAL: CORREGIR SISTEMA (TAR/CS/MIX) ──────────────────
 function ModalCambioSistema({ sistemaActual, onClose, onConfirmar }) {
   const opciones = [
-    { valor: 'TAR', nombre: 'Tarimas' },
+    { valor: 'TAR', nombre: 'Carga agrupada' },
     { valor: 'CS',  nombre: 'Carga suelta' },
     { valor: 'MIX', nombre: 'Mixto' },
   ].filter(o => o.valor !== sistemaActual)
@@ -306,7 +306,7 @@ function Dashboard({ irDetalle, onFusionar }) {
             <label>Sistema</label>
             <select value={filtros.sistema} onChange={e => actualizarFiltro('sistema', e.target.value)}>
               <option value="">Todos</option>
-              <option value="TAR">Tarimas</option>
+              <option value="TAR">Carga agrupada</option>
               <option value="CS">Carga suelta</option>
               <option value="MIX">Mixto</option>
             </select>
@@ -384,9 +384,9 @@ function Dashboard({ irDetalle, onFusionar }) {
 
 // ── NUEVA ENTREGA (unificada TAR / CS / MIX) ─────────────
 const SISTEMAS = [
-  { cod: 'TAR', nombre: 'Tarimas',      desc: 'Embarque en tarimas completas con cierre por categoria.',        color: 'var(--tar)' },
+  { cod: 'TAR', nombre: 'Carga agrupada', desc: 'Embarque agrupado en tarimas o cajas, con cierre por categoria.', color: 'var(--tar)' },
   { cod: 'CS',  nombre: 'Carga suelta', desc: 'Piezas individuales o cajas master con etiquetado unitario.',    color: 'var(--cs)' },
-  { cod: 'MIX', nombre: 'OV mixta',     desc: 'Una orden con tarimas y carga suelta en el mismo embarque.',     color: 'var(--mix)' },
+  { cod: 'MIX', nombre: 'OV mixta',     desc: 'Una orden con carga agrupada y carga suelta en el mismo embarque.', color: 'var(--mix)' },
 ]
 
 function NuevaEntrega({ toast, irDetalle }) {
@@ -665,13 +665,19 @@ export function Modal({ titulo, sub, onClose, children, footer }) {
 // ── MODAL: NUEVA TARIMA (peso opcional) ──────────────────
 function ModalNuevaTarima({ onClose, onConfirmar }) {
   const [peso, setPeso] = useState('')
+  const [tipo, setTipo] = useState('tarima')
   return (
-    <Modal titulo="Nueva tarima" sub="Se crea vacia; despues le asignas productos" onClose={onClose}
+    <Modal titulo="Agrupar mercancia" sub="Se crea vacia; despues le asignas productos" onClose={onClose}
       footer={<>
         <button className="btn-sec" onClick={onClose}>Cancelar</button>
-        <button className="btn-principal" onClick={() => onConfirmar(parseFloat(peso) || 0)}>Crear tarima</button>
+        <button className="btn-principal" onClick={() => onConfirmar(parseFloat(peso) || 0, tipo)}>Crear</button>
       </>}>
-      <label className="dim-label">Peso del palet en kg (opcional)</label>
+      <label className="dim-label">Tipo de bulto</label>
+      <div className="cm-toggle" style={{marginBottom:14}}>
+        <span className={'cm-pill' + (tipo === 'tarima' ? ' on' : '')} onClick={() => setTipo('tarima')}>Tarima</span>
+        <span className={'cm-pill' + (tipo === 'caja' ? ' on' : '')} onClick={() => setTipo('caja')}>Caja</span>
+      </div>
+      <label className="dim-label">Peso en kg (opcional)</label>
       <input className="inp" type="number" min="0" step="0.1" placeholder="0"
         value={peso} onChange={e => setPeso(e.target.value)} autoFocus />
     </Modal>
@@ -697,15 +703,15 @@ function ModalAsignar({ tarimasAbiertas, productos, idTarimaPre, onClose, onConf
   }
 
   return (
-    <Modal titulo="Asignar a tarima" sub={`${productos.length} producto(s) seleccionado(s)`} onClose={onClose}
+    <Modal titulo="Asignar a carga agrupada" sub={`${productos.length} producto(s) seleccionado(s)`} onClose={onClose}
       footer={<>
         <button className="btn-sec" onClick={onClose}>Cancelar</button>
         <button className="btn-principal" onClick={confirmar}>Confirmar</button>
       </>}>
-      <label className="dim-label">Tarima destino</label>
+      <label className="dim-label">Carga agrupada destino</label>
       <select className="inp" style={{marginBottom: 14}} value={idTarima} onChange={e => setIdTarima(e.target.value)}>
         {tarimasAbiertas.map(t => (
-          <option key={t.id_tarima} value={t.id_tarima}>Tarima {t.numero_tarima}</option>
+          <option key={t.id_tarima} value={t.id_tarima}>{t.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'} {t.numero_tarima}</option>
         ))}
       </select>
       <label className="dim-label">Cantidad por producto</label>
@@ -732,12 +738,12 @@ function ModalCerrarTarima({ onClose, onConfirmar }) {
   const [ancho, setAncho] = useState('')
   const [alto, setAlto] = useState('')
   return (
-    <Modal titulo="Cerrar tarima" sub="Dimensiones fisicas opcionales" onClose={onClose}
+    <Modal titulo="Cerrar bulto" sub="Dimensiones fisicas opcionales" onClose={onClose}
       footer={<>
         <button className="btn-sec" onClick={onClose}>Cancelar</button>
         <button className="btn-principal" onClick={() => onConfirmar({
           largo_cm: parseFloat(largo) || 0, ancho_cm: parseFloat(ancho) || 0, alto_cm: parseFloat(alto) || 0
-        })}>Cerrar tarima</button>
+        })}>Cerrar bulto</button>
       </>}>
       <div className="dim-grid">
         <div><label className="dim-label">Largo (cm)</label>
@@ -840,7 +846,7 @@ function ModalFusion({ onClose, onConfirmar }) {
       footer={<>
         <button className="btn-sec" onClick={onClose}>Cancelar</button>
         <button className="btn-principal" disabled={selEnt.size < 2} onClick={() => onConfirmar([...selEnt])}>
-          Entarimar juntas
+          Agrupar juntas
         </button>
       </>}>
       {!grupos ? <div className="cargando">Cargando...</div>
@@ -959,16 +965,16 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
     }
   }
 
-  const crearTarimaVacia = async (pesoPaletKg) => {
+  const crearTarimaVacia = async (pesoPaletKg, tipoBulto) => {
     try {
-      await api.crearTarima(id, pesoPaletKg, ent.idsFusionActivos || null)
-      toast('Tarima creada', 'ok')
+      await api.crearTarima(id, pesoPaletKg, ent.idsFusionActivos || null, tipoBulto)
+      toast(tipoBulto === 'caja' ? 'Caja creada' : 'Tarima creada', 'ok')
       setModalNueva(false); cargar()
     } catch (e) { toast(e.message, 'error') }
   }
 
   const abrirAsignar = (idTarimaPre) => {
-    if (abiertasT.length === 0) { toast('Crea una tarima abierta primero', 'error'); return }
+    if (abiertasT.length === 0) { toast('Crea un bulto abierto primero', 'error'); return }
     if (sel.size === 0) { toast('Selecciona productos pendientes', 'error'); return }
     setModalAsignarPre(idTarimaPre ?? null)
   }
@@ -985,7 +991,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const quitarUnDetalle = (idDetalle) => {
     setModalConfirmar({
       titulo: 'Quitar producto',
-      mensaje: '¿Quitar este producto de la tarima? La cantidad vuelve a pendiente.',
+      mensaje: '¿Quitar este producto del bulto? La cantidad vuelve a pendiente.',
       accion: async () => {
         try { await api.quitarDetalle(id, idDetalle); toast('Devuelto', 'ok'); cargar() }
         catch (e) { toast(e.message, 'error') }
@@ -995,8 +1001,8 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
 
   const eliminarUnaTarima = (idTarima) => {
     setModalConfirmar({
-      titulo: 'Eliminar tarima',
-      mensaje: '¿Eliminar esta tarima? Todas sus cantidades vuelven a pendiente.',
+      titulo: 'Eliminar bulto',
+      mensaje: '¿Eliminar este bulto? Todas sus cantidades vuelven a pendiente.',
       peligro: true,
       accion: async () => {
         try { await api.eliminarTarima(id, idTarima); toast('Tarima eliminada', 'ok'); cargar() }
@@ -1080,7 +1086,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
             ...(productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX')
               ? [{ label: 'Imprimir etiquetas sueltas', onClick: abrirEtiquetasSueltas }] : []),
             ...(tarimas.some(t => t.estatus === 'cerrada')
-              ? [{ label: 'Ver etiquetas de tarima', onClick: () => verEtiquetas(id) }] : []),
+              ? [{ label: 'Ver etiquetas de carga agrupada', onClick: () => verEtiquetas(id) }] : []),
             ...(tarimas.some(t => t.estatus === 'cerrada') || ent.estatus === 'completada'
               ? [{ label: 'Lista de empaque', onClick: () => verPacking(id) }] : []),
             ...(ent.estatus === 'completada'
@@ -1136,7 +1142,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
             {usaTarimas && sel.size > 0 && (
               <div style={{marginTop:12,display:'flex',gap:8}}>
                 <button className="btn-principal" onClick={() => abrirAsignar()}>
-                  Asignar {sel.size} producto(s) a tarima
+                  Asignar {sel.size} producto(s) a carga agrupada
                 </button>
               </div>
             )}
@@ -1146,13 +1152,13 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
         {usaTarimas && (
           <div className="panel">
             <div className="panel-titulo">
-              Tarimas<span className="chip chip-ok">{tarimas.length}</span>
+              Carga agrupada<span className="chip chip-ok">{tarimas.length}</span>
             </div>
             <button className="btn-mini btn-mini-primario" style={{width:'100%',marginBottom:10}} onClick={() => setModalNueva(true)}>
-              + Nueva tarima
+              + Nuevo bulto
             </button>
             {tarimas.length === 0
-              ? <div className="tarima-vacia">Sin tarimas todavia.</div>
+              ? <div className="tarima-vacia">Sin bultos todavia.</div>
               : [...tarimas].sort((a, b) => (a.estatus === 'cerrada' ? 1 : 0) - (b.estatus === 'cerrada' ? 1 : 0)).map(t => {
                 const abierta = abiertas.has(t.id_tarima)
                 const cerrada = t.estatus === 'cerrada'
@@ -1160,7 +1166,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
                 return (
                   <div key={t.id_tarima} className={'tarima-card' + (cerrada ? ' cerrada' : '')}>
                     <div className="tarima-head" onClick={() => toggleAbierta(t.id_tarima)}>
-                      <span className="tarima-num">Tarima {t.numero_tarima}</span>
+                      <span className="tarima-num">{t.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'} {t.numero_tarima}</span>
                       <span className="tarima-count">{detalle.length} prod.</span>
                       <span className={'chip ' + (cerrada ? 'chip-ok' : 'chip-warn')}>{cerrada ? 'cerrada' : 'abierta'}</span>
                     </div>
@@ -1419,7 +1425,7 @@ function Migaja() {
   else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
   else if (seg[0] === 'entregas' && seg[1]) {
     partes.push(seg[1])
-    if (seg[2] === 'etiquetas') partes.push('Etiquetas de tarima')
+    if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
     if (seg[2] === 'etiquetas-sueltas') partes.push('Etiquetas sueltas')
     if (seg[2] === 'packing') partes.push('Lista de empaque')
   }
