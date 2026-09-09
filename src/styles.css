@@ -551,6 +551,11 @@ input,select{font-family:var(--sans);}
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
 }
 .et-suelta-caja{font-size:8px;font-weight:800;color:#0a6b4a;}
+
+/* ── TOGGLE MASTER/PIEZA en la fila de producto ─────────── */
+.cm-toggle{display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:2px;gap:2px;}
+.cm-pill{padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700;color:var(--text3);cursor:pointer;user-select:none;white-space:nowrap;}
+.cm-pill.on{background:var(--amarillo);color:#161000;}
 .et-suelta-dir{
   font-size:7.5px;color:#444;line-height:1.15;
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
