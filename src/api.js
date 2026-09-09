@@ -50,10 +50,10 @@ export const completarEntrega = (id)          => req('/api/entregas/' + id + '/c
 export const getDashboard     = ()            => req('/api/dashboard/')
 
 // ── TARIMAS ───────────────────────────────────────────────
-export const crearTarima = (idEntrega, pesoPaletKg = 0, idsEntregasFusionadas = null) =>
+export const crearTarima = (idEntrega, pesoPaletKg = 0, idsEntregasFusionadas = null, tipoBulto = 'tarima') =>
   req(`/api/entregas/${idEntrega}/tarimas`, {
     method: 'POST',
-    body: JSON.stringify({ peso_palet_kg: pesoPaletKg, ids_entregas_fusionadas: idsEntregasFusionadas })
+    body: JSON.stringify({ peso_palet_kg: pesoPaletKg, tipo_bulto: tipoBulto, ids_entregas_fusionadas: idsEntregasFusionadas })
   })
 
 // asignaciones: [{ id_producto, cantidad }, ...]
