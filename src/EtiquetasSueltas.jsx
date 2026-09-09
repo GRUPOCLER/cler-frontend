@@ -42,6 +42,7 @@ function PaginaEtiquetaSuelta({ d }) {
         <div className="et-suelta-cant-wrap">
           <div className="et-suelta-cant">{d.cantidad}</div>
           <div className="et-suelta-unidad">{d.unidad}</div>
+          {d.peso_kg > 0 && <div className="et-suelta-peso">{d.peso_kg} kg</div>}
         </div>
         <div className="et-suelta-bc-wrap">
           {d.barcode_entrega_url && <img src={d.barcode_entrega_url} className="et-suelta-bc-img" alt="bc" />}
