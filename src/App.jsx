@@ -40,41 +40,6 @@ function MenuAcciones({ acciones }) {
   )
 }
 
-// ── MODAL: ELEGIR QUE PRODUCTOS VAN EN CAJA MASTER ────────
-function ModalCajaMaster({ candidatos, onClose, onConfirmar }) {
-  const [seleccionados, setSeleccionados] = useState(new Set())
-  const toggle = (clave) => setSeleccionados(prev => {
-    const s = new Set(prev)
-    s.has(clave) ? s.delete(clave) : s.add(clave)
-    return s
-  })
-
-  return (
-    <Modal titulo="Caja master" sub="Elige que productos van empacados en caja master — el resto se imprime por pieza" onClose={onClose}
-      footer={<>
-        <button className="btn-sec" onClick={onClose}>Cancelar</button>
-        <button className="btn-principal" onClick={() => onConfirmar(Array.from(seleccionados))}>
-          Generar etiquetas
-        </button>
-      </>}>
-      <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:320,overflowY:'auto'}}>
-        {candidatos.map(p => (
-          <label key={p.id_producto} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'var(--bg3)',borderRadius:8,cursor:'pointer'}}>
-            <input type="checkbox" checked={seleccionados.has(p.clave)} onChange={() => toggle(p.clave)} />
-            <div style={{flex:1}}>
-              <div style={{fontWeight:700,fontSize:13}}>{p.clave}</div>
-              <div style={{fontSize:11,color:'var(--text3)'}}>{p.descripcion}</div>
-            </div>
-            <div style={{fontSize:11,color:'var(--text3)',textAlign:'right'}}>
-              {p.cantidad_pendiente} pzas<br/>x{p.cm_cant}/caja
-            </div>
-          </label>
-        ))}
-      </div>
-    </Modal>
-  )
-}
-
 function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro, onClose, onConfirmar }) {
   return (
     <Modal titulo={titulo} onClose={onClose}
@@ -903,7 +868,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const [modalExt, setModalExt] = useState(null)
   const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
   const [modalCambioSistema, setModalCambioSistema] = useState(false)
-  const [modalCajaMaster, setModalCajaMaster] = useState(null) // { candidatos } | null
+  const [modoMaster, setModoMaster] = useState({}) // { clave: true } — true = va en caja master
   const [modalSucursal, setModalSucursal] = useState(false)
   const [modalCliente, setModalCliente] = useState(false)
   const [abiertas, setAbiertas] = useState(new Set())
@@ -966,10 +931,11 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
     catch (e) { toast(e.message, 'error') }
   }
 
+  const toggleModoMaster = (clave) => setModoMaster(prev => ({ ...prev, [clave]: !prev[clave] }))
+
   const abrirEtiquetasSueltas = () => {
-    const candidatos = productos.filter(p => p.cantidad_pendiente > 0 && p.cm_cant > 0)
-    if (candidatos.length === 0) { verEtiquetasSueltas(id); return }
-    setModalCajaMaster({ candidatos })
+    const skus = Object.keys(modoMaster).filter(clave => modoMaster[clave])
+    verEtiquetasSueltas(id, skus)
   }
 
   const solicitarCambio = async (sistemaNuevo, motivo) => {
@@ -1137,7 +1103,18 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
                         padding:'8px 12px',borderBottom:'1px solid var(--border)',fontSize:12,opacity:done?0.5:1}}>
                       <input type="checkbox" disabled={done} checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} />
                       <span style={{color:'var(--amarillo)',fontWeight:700,fontSize:11}}>{p.clave}</span>
-                      <span style={{color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</span>
+                      <div>
+                        <div style={{color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</div>
+                        {!done && p.cm_cant > 0 && (
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:3}}>
+                            <div className="cm-toggle">
+                              <span className={'cm-pill' + (modoMaster[p.clave] ? ' on' : '')} onClick={() => toggleModoMaster(p.clave)}>Master</span>
+                              <span className={'cm-pill' + (!modoMaster[p.clave] ? ' on' : '')} onClick={() => toggleModoMaster(p.clave)}>Pieza</span>
+                            </div>
+                            <span style={{fontSize:10,color:'var(--text3)'}}>x{p.cm_cant}/caja</span>
+                          </div>
+                        )}
+                      </div>
                       <span style={{textAlign:'right',}}>{p.cantidad_total}</span>
                       <span style={{textAlign:'right',color:'var(--text3)'}}>{p.cantidad_asignada || 0}</span>
                       <span style={{textAlign:'right',color: done ? 'var(--text3)' : 'var(--amarillo)'}}>{p.cantidad_pendiente}</span>
@@ -1242,11 +1219,6 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
       {modalCambioSistema && (
         <ModalCambioSistema sistemaActual={ent.sistema}
           onClose={() => setModalCambioSistema(false)} onConfirmar={solicitarCambio} />
-      )}
-      {modalCajaMaster && (
-        <ModalCajaMaster candidatos={modalCajaMaster.candidatos}
-          onClose={() => setModalCajaMaster(null)}
-          onConfirmar={(skus) => { setModalCajaMaster(null); verEtiquetasSueltas(id, skus) }} />
       )}
       {modalSucursal && (
         <ModalSucursal actual={ent.sucursal} onClose={() => setModalSucursal(false)} onConfirmar={guardarSucursal} />
