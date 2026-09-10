@@ -355,7 +355,7 @@ export default function AdminPanel({ toast, miRol }) {
                     <td>{u.nombre_display || '—'}</td>
                     <td><span className={'chip ' + chipRol(u.rol)}>{u.rol}</span></td>
                     <td><span className={u.activo ? 'chip chip-ok' : 'chip chip-warn'}>{u.activo ? 'activo' : 'inactivo'}</span></td>
-                    <td style={{fontSize:11,color:'var(--text3)'}}>{(u.ultimo_acceso || '—').substring(0,16)}</td>
+                    <td style={{fontSize:11,color:'var(--text3)'}}>{u.ultimo_acceso ? api.formatearFecha(u.ultimo_acceso) : '—'}</td>
                     <td style={{display:'flex',gap:6}}>
                       <button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalUsuario(u) }}>Editar</button>
                       <button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalAlmacenesUsuario(u.usuario) }}>Almacenes</button>
@@ -379,7 +379,7 @@ export default function AdminPanel({ toast, miRol }) {
               <tbody>
                 {logs.map(l => (
                   <tr key={l.id}>
-                    <td style={{fontSize:11,color:'var(--text3)'}}>{(l.fecha || '').substring(0,19)}</td>
+                    <td style={{fontSize:11,color:'var(--text3)'}}>{api.formatearFecha(l.fecha)}</td>
                     <td style={{}}>{l.usuario}</td>
                     <td>{l.accion}</td>
                     <td style={{color:'var(--text2)'}}>{l.detalle}</td>
