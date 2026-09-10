@@ -40,6 +40,24 @@ function MenuAcciones({ acciones }) {
   )
 }
 
+// ── AVISO FLOTANTE: nueva solicitud pendiente de autorizar ────
+function AvisoPendiente({ aviso, onVer, onCerrar }) {
+  if (!aviso) return null
+  return (
+    <div className="aviso-flotante">
+      <div className="aviso-icono">⚠</div>
+      <div className="aviso-texto">
+        <div className="aviso-titulo">
+          {aviso.cantidadNueva === 1 ? 'Nueva solicitud pendiente' : `${aviso.cantidadNueva} solicitudes nuevas pendientes`}
+        </div>
+        <div className="aviso-sub">Requiere tu autorizacion — {aviso.total} en total</div>
+      </div>
+      <button className="aviso-btn-ver" onClick={onVer}>Ver</button>
+      <button className="aviso-btn-cerrar" onClick={onCerrar}>✕</button>
+    </div>
+  )
+}
+
 function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro, onClose, onConfirmar }) {
   return (
     <Modal titulo={titulo} onClose={onClose}
@@ -1444,6 +1462,8 @@ export default function App() {
   const [logueado, setLogueado] = useState(!!api.getToken())
   const [modalFusion, setModalFusion] = useState(false)
   const [pendientesReimpresion, setPendientesReimpresion] = useState(0)
+  const [avisoPendiente, setAvisoPendiente] = useState(null) // { cantidadNueva } | null
+  const prevPendientesRef = useRef(null) // null = todavia no cargamos la primera vez
   const [toast, Toast] = useToast()
   const navigate = useNavigate()
   const location = useLocation()
@@ -1453,12 +1473,26 @@ export default function App() {
     const user0 = api.getUser()
     if (user0?.rol !== 'admin' && user0?.rol !== 'gerente') return
     const check = () => Promise.all([api.contarPendientes(), api.contarPendientesCambios()])
-      .then(([r1, r2]) => setPendientesReimpresion((r1.pendientes || 0) + (r2.pendientes || 0)))
+      .then(([r1, r2]) => {
+        const total = (r1.pendientes || 0) + (r2.pendientes || 0)
+        // Solo avisar si SUBIO desde la ultima revision — no en la primera
+        // carga de la pagina (para no asustar con lo que ya estaba ahi)
+        if (prevPendientesRef.current !== null && total > prevPendientesRef.current) {
+          setAvisoPendiente({ cantidadNueva: total - prevPendientesRef.current, total })
+        }
+        prevPendientesRef.current = total
+        setPendientesReimpresion(total)
+      })
       .catch(() => {})
     check()
-    const intervalo = setInterval(check, 15000)
+    const intervalo = setInterval(check, 8000)
     return () => clearInterval(intervalo)
   }, [logueado])
+
+  // Si ya esta parado en Autorizaciones, no hace falta seguir avisando
+  useEffect(() => {
+    if (location.pathname === '/reimpresiones') setAvisoPendiente(null)
+  }, [location.pathname])
 
   if (!logueado) return <Login onOk={() => setLogueado(true)} />
 
@@ -1535,6 +1569,9 @@ export default function App() {
         <ModalFusion onClose={() => setModalFusion(false)} onConfirmar={confirmarFusion} />
       )}
       <Toast />
+      <AvisoPendiente aviso={avisoPendiente}
+        onVer={() => { setAvisoPendiente(null); navigate('/reimpresiones') }}
+        onCerrar={() => setAvisoPendiente(null)} />
     </div>
   )
 }
