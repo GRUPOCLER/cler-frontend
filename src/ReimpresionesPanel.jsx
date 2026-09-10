@@ -105,7 +105,7 @@ export default function ReimpresionesPanel({ toast }) {
             <tbody>
               {pendientes.map(s => (
                 <tr key={s.id}>
-                  <td style={{fontSize:11,color:'var(--text3)'}}>{(s.fecha_solicitud || '').substring(0,16)}</td>
+                  <td style={{fontSize:11,color:'var(--text3)'}}>{api.formatearFecha(s.fecha_solicitud)}</td>
                   <td><span className="chip chip-warn">{TIPO_LABEL[s.tipo] || s.tipo}</span></td>
                   <td style={{fontWeight:700}}>{s.num_entrega || s.referencia}</td>
                   <td>{s.solicitado_por}</td>
@@ -131,7 +131,7 @@ export default function ReimpresionesPanel({ toast }) {
             <tbody>
               {cambiosPend.map(c => (
                 <tr key={c.id}>
-                  <td style={{fontSize:11,color:'var(--text3)'}}>{(c.fecha_solicitud || '').substring(0,16)}</td>
+                  <td style={{fontSize:11,color:'var(--text3)'}}>{api.formatearFecha(c.fecha_solicitud)}</td>
                   <td style={{fontWeight:700}}>{c.num_entrega || c.id_entrega}</td>
                   <td><span className="chip chip-warn">{c.sistema_actual} → {c.sistema_nuevo}</span></td>
                   <td>{c.solicitado_por}</td>
@@ -155,7 +155,7 @@ export default function ReimpresionesPanel({ toast }) {
             <tbody>
               {resueltas.slice(0, 30).map(s => (
                 <tr key={s.id}>
-                  <td style={{fontSize:11,color:'var(--text3)'}}>{(s.fecha_resolucion || s.fecha_solicitud || '').substring(0,16)}</td>
+                  <td style={{fontSize:11,color:'var(--text3)'}}>{api.formatearFecha(s.fecha_resolucion || s.fecha_solicitud)}</td>
                   <td><span className="chip chip-ok">{TIPO_LABEL[s.tipo] || s.tipo}</span></td>
                   <td style={{fontWeight:700}}>{s.num_entrega || s.referencia}</td>
                   <td>{s.solicitado_por}</td>
@@ -176,7 +176,7 @@ export default function ReimpresionesPanel({ toast }) {
             <tbody>
               {cambiosRes.slice(0, 30).map(c => (
                 <tr key={c.id}>
-                  <td style={{fontSize:11,color:'var(--text3)'}}>{(c.fecha_resolucion || c.fecha_solicitud || '').substring(0,16)}</td>
+                  <td style={{fontSize:11,color:'var(--text3)'}}>{api.formatearFecha(c.fecha_resolucion || c.fecha_solicitud)}</td>
                   <td style={{fontWeight:700}}>{c.num_entrega || c.id_entrega}</td>
                   <td><span className="chip chip-ok">{c.sistema_actual} → {c.sistema_nuevo}</span></td>
                   <td>{c.solicitado_por}</td>
