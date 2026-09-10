@@ -226,3 +226,25 @@ export const agregarAlmacenUsuario = (usuario, almacen) =>
 
 export const quitarAlmacenUsuario = (idAsignacion) =>
   req(`/api/odoo/usuarios-almacenes/${idAsignacion}`, { method: 'DELETE' })
+
+// ── FORMATO DE FECHAS — convierte UTC (como llega de la BD) a la hora
+// real de Veracruz/Mexico (America/Mexico_City), en vez de mostrar la
+// hora del servidor sin convertir.
+export function formatearFecha(fechaStr, conHora = true) {
+  if (!fechaStr) return ''
+  let iso = fechaStr.trim()
+  if (iso && !iso.endsWith('Z') && !iso.includes('+')) {
+    iso = iso.replace(' ', 'T') + 'Z'  // Postgres manda sin zona -> asumimos UTC
+  }
+  const fecha = new Date(iso)
+  if (isNaN(fecha.getTime())) return fechaStr.substring(0, conHora ? 16 : 10)
+
+  const opciones = conHora
+    ? { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }
+    : { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }
+  const partes = new Intl.DateTimeFormat('es-MX', opciones).formatToParts(fecha)
+  const obtener = (tipo) => partes.find(p => p.type === tipo)?.value || ''
+  return conHora
+    ? `${obtener('year')}-${obtener('month')}-${obtener('day')} ${obtener('hour')}:${obtener('minute')}`
+    : `${obtener('year')}-${obtener('month')}-${obtener('day')}`
+}
