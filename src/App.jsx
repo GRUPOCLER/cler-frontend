@@ -367,7 +367,7 @@ function Dashboard({ irDetalle, onFusionar }) {
                       <td><span className={'badge-sistema badge-' + e.sistema}>{e.sistema}</span></td>
                       <td>{e.nombre_cliente || '—'}</td>
                       <td style={{fontSize:12,color:'var(--text3)'}}>
-                        {(e.fecha_creacion || '').substring(0, 10)}</td>
+                        {api.formatearFecha(e.fecha_creacion, false)}</td>
                       <td style={{fontSize:12,color:'var(--text3)'}}>{FUENTE_LABEL[e.fuente] || e.fuente || '—'}</td>
                       <td><span className={'badge-estatus badge-' + e.estatus}>{e.estatus}</span></td>
                     </tr>
