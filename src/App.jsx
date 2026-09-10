@@ -684,20 +684,31 @@ export function Modal({ titulo, sub, onClose, children, footer }) {
 function ModalNuevaTarima({ onClose, onConfirmar }) {
   const [peso, setPeso] = useState('')
   const [tipo, setTipo] = useState('tarima')
+  const [enviando, setEnviando] = useState(false)
+
+  const confirmar = async () => {
+    if (enviando) return  // evita doble clic mientras la peticion esta en camino
+    setEnviando(true)
+    try { await onConfirmar(parseFloat(peso) || 0, tipo) }
+    finally { setEnviando(false) }
+  }
+
   return (
     <Modal titulo="Agrupar mercancia" sub="Se crea vacia; despues le asignas productos" onClose={onClose}
       footer={<>
-        <button className="btn-sec" onClick={onClose}>Cancelar</button>
-        <button className="btn-principal" onClick={() => onConfirmar(parseFloat(peso) || 0, tipo)}>Crear</button>
+        <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
+        <button className="btn-principal" onClick={confirmar} disabled={enviando}>
+          {enviando ? 'Creando...' : 'Crear'}
+        </button>
       </>}>
       <label className="dim-label">Tipo de bulto</label>
       <div className="cm-toggle" style={{marginBottom:14}}>
-        <span className={'cm-pill' + (tipo === 'tarima' ? ' on' : '')} onClick={() => setTipo('tarima')}>Tarima</span>
-        <span className={'cm-pill' + (tipo === 'caja' ? ' on' : '')} onClick={() => setTipo('caja')}>Caja</span>
+        <span className={'cm-pill' + (tipo === 'tarima' ? ' on' : '')} onClick={() => !enviando && setTipo('tarima')}>Tarima</span>
+        <span className={'cm-pill' + (tipo === 'caja' ? ' on' : '')} onClick={() => !enviando && setTipo('caja')}>Caja</span>
       </div>
       <label className="dim-label">Peso en kg (opcional)</label>
       <input className="inp" type="number" min="0" step="0.1" placeholder="0"
-        value={peso} onChange={e => setPeso(e.target.value)} autoFocus />
+        value={peso} onChange={e => setPeso(e.target.value)} disabled={enviando} autoFocus />
     </Modal>
   )
 }
