@@ -30,6 +30,7 @@ function MenuAcciones({ acciones }) {
         <div className="menu-acciones-pop">
           {acciones.map((a, i) => (
             <button key={i} className="menu-acciones-item"
+              style={a.peligro ? {color:'var(--rojo)'} : undefined}
               onClick={() => { setAbierto(false); a.onClick() }}>
               {a.label}
             </button>
@@ -55,6 +56,83 @@ function AvisoPendiente({ aviso, onVer, onCerrar }) {
       <button className="aviso-btn-ver" onClick={onVer}>Ver</button>
       <button className="aviso-btn-cerrar" onClick={onCerrar}>✕</button>
     </div>
+  )
+}
+
+// ── MODAL: MOTIVO DE ENTREGA PARCIAL ──────────────────────
+function ModalEntregaParcial({ excluidos, onClose, onConfirmar }) {
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const valido = motivo.trim().length >= 5
+
+  const confirmar = async () => {
+    if (!valido || enviando) return
+    setEnviando(true)
+    try { await onConfirmar(motivo.trim()) }
+    finally { setEnviando(false) }
+  }
+
+  return (
+    <Modal titulo="Entrega parcial" sub="Dejaste productos sin marcar — se quedaran pendientes en esta entrega" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
+        <button className="btn-principal" onClick={confirmar} disabled={!valido || enviando}>
+          {enviando ? 'Generando...' : 'Confirmar e imprimir'}
+        </button>
+      </>}>
+      <div style={{fontSize:12,color:'var(--text3)',marginBottom:10,lineHeight:1.5}}>
+        Estos productos <b>no</b> se van a imprimir ni marcar como entregados ahora:
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:14,maxHeight:140,overflowY:'auto'}}>
+        {excluidos.map(p => (
+          <div key={p.id_producto} style={{fontSize:12,padding:'5px 8px',background:'var(--bg3)',borderRadius:6}}>
+            <b>{p.clave}</b> — {p.descripcion}
+          </div>
+        ))}
+      </div>
+      <label className="dim-label">Motivo de la entrega parcial</label>
+      <textarea className="inp" rows={3} placeholder="Ej. Faltante de stock, se completa despues"
+        value={motivo} onChange={e => setMotivo(e.target.value)} disabled={enviando} autoFocus />
+      {motivo.trim().length > 0 && !valido && (
+        <div style={{fontSize:11,color:'#ef4444',marginTop:6}}>Escribe al menos 5 caracteres</div>
+      )}
+    </Modal>
+  )
+}
+
+// ── MODAL: ELIMINAR ENTREGA (exige motivo, solo Admin) ────
+function ModalEliminarEntrega({ numEntrega, onClose, onConfirmar }) {
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const valido = motivo.trim().length >= 5
+
+  const confirmar = async () => {
+    if (!valido || enviando) return
+    setEnviando(true)
+    try { await onConfirmar(motivo.trim()) }
+    finally { setEnviando(false) }
+  }
+
+  return (
+    <Modal titulo="Eliminar entrega" sub={`Esta a punto de eliminar ${numEntrega} de forma permanente`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
+        <button className="btn-principal" style={{background:'var(--rojo)',color:'#fff'}}
+          onClick={confirmar} disabled={!valido || enviando}>
+          {enviando ? 'Eliminando...' : 'Eliminar entrega'}
+        </button>
+      </>}>
+      <div style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>
+        Esta accion no se puede deshacer — se borran tambien sus productos, tarimas y cajas.
+        Escribe el motivo de la eliminacion (queda guardado en la Bitacora).
+      </div>
+      <label className="dim-label">Motivo</label>
+      <textarea className="inp" rows={3} placeholder="Ej. Entrega duplicada por error al importar el PDF"
+        value={motivo} onChange={e => setMotivo(e.target.value)} disabled={enviando} autoFocus />
+      {motivo.trim().length > 0 && !valido && (
+        <div style={{fontSize:11,color:'#ef4444',marginTop:6}}>Escribe al menos 5 caracteres</div>
+      )}
+    </Modal>
   )
 }
 
@@ -904,6 +982,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const { id } = useParams()
   const navigate = useNavigate()
   const volver = () => navigate('/')
+  const miRol = api.getUser()?.rol
   const [ent, setEnt] = useState(null)
   const [sel, setSel] = useState(new Set())
   const [modalNueva, setModalNueva] = useState(false)
@@ -912,6 +991,8 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const [modalExt, setModalExt] = useState(null)
   const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
   const [modalCambioSistema, setModalCambioSistema] = useState(false)
+  const [modalEliminarEntrega, setModalEliminarEntrega] = useState(false)
+  const [modalEntregaParcial, setModalEntregaParcial] = useState(null) // { excluidos } | null
   const [modoMaster, setModoMaster] = useState({}) // { clave: true } — true = va en caja master
   const [modalSucursal, setModalSucursal] = useState(false)
   const [modalCliente, setModalCliente] = useState(false)
@@ -979,7 +1060,34 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
 
   const abrirEtiquetasSueltas = () => {
     const skus = Object.keys(modoMaster).filter(clave => modoMaster[clave])
-    verEtiquetasSueltas(id, skus)
+    const pendientes = productos.filter(p => p.cantidad_pendiente > 0)
+    const seleccionados = pendientes.filter(p => sel.has(p.id_producto))
+
+    // Si no marco nada, o marco todo lo pendiente, es una entrega completa normal
+    if (seleccionados.length === 0 || seleccionados.length === pendientes.length) {
+      setSel(new Set())
+      verEtiquetasSueltas(id, skus)
+      return
+    }
+    // Selecciono solo una parte — pide motivo antes de continuar
+    const excluidos = pendientes.filter(p => !sel.has(p.id_producto))
+    setModalEntregaParcial({ excluidos, seleccionados, skus })
+  }
+
+  const confirmarEntregaParcial = async (motivo) => {
+    const { seleccionados, skus } = modalEntregaParcial
+    setModalEntregaParcial(null)
+    setSel(new Set())
+    verEtiquetasSueltas(id, skus, seleccionados.map(p => p.id_producto), motivo)
+  }
+
+  const eliminarEntregaCompleta = async (motivo) => {
+    try {
+      await api.eliminarEntrega(id, motivo)
+      toast('Entrega eliminada', 'ok')
+      setModalEliminarEntrega(false)
+      navigate('/')
+    } catch (e) { toast(e.message, 'error') }
   }
 
   const solicitarCambio = async (sistemaNuevo, motivo) => {
@@ -1121,6 +1229,8 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
             ...(ent.estatus === 'completada'
               ? [{ label: 'Reabrir entrega', onClick: reabrirEnt }] : []),
             { label: 'Corregir tipo de entrega', onClick: () => setModalCambioSistema(true) },
+            ...(miRol === 'admin'
+              ? [{ label: 'Eliminar entrega', onClick: () => setModalEliminarEntrega(true), peligro: true }] : []),
           ]} />
         </div>
       </div>
@@ -1264,6 +1374,14 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
         <ModalCambioSistema sistemaActual={ent.sistema}
           onClose={() => setModalCambioSistema(false)} onConfirmar={solicitarCambio} />
       )}
+      {modalEliminarEntrega && (
+        <ModalEliminarEntrega numEntrega={ent.num_entrega}
+          onClose={() => setModalEliminarEntrega(false)} onConfirmar={eliminarEntregaCompleta} />
+      )}
+      {modalEntregaParcial && (
+        <ModalEntregaParcial excluidos={modalEntregaParcial.excluidos}
+          onClose={() => setModalEntregaParcial(null)} onConfirmar={confirmarEntregaParcial} />
+      )}
       {modalSucursal && (
         <ModalSucursal actual={ent.sucursal} onClose={() => setModalSucursal(false)} onConfirmar={guardarSucursal} />
       )}
@@ -1341,12 +1459,14 @@ function VistaEtiquetasSueltas({ toast }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const skusMaster = (searchParams.get('master') || '').split(',').filter(Boolean)
+  const idsSolo = (searchParams.get('solo') || '').split(',').filter(Boolean)
+  const motivoParcial = searchParams.get('motivo') || ''
   const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null)
 
   useEffect(() => {
-    api.obtenerEtiquetasSueltas(idEntrega, skusMaster).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+    api.obtenerEtiquetasSueltas(idEntrega, skusMaster, idsSolo, motivoParcial).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
   }, [idEntrega])
 
   if (!datos) return <div className="cargando">Generando etiquetas...</div>
@@ -1511,8 +1631,14 @@ export default function App() {
   const irDetalle = (id) => navigate(`/entregas/${id}`)
   const verEtiquetas = (idEnt, idTar = null) =>
     navigate(idTar ? `/entregas/${idEnt}/etiquetas/${idTar}` : `/entregas/${idEnt}/etiquetas`)
-  const verEtiquetasSueltas = (idEnt, skusMaster = []) =>
-    navigate(`/entregas/${idEnt}/etiquetas-sueltas` + (skusMaster.length ? `?master=${encodeURIComponent(skusMaster.join(','))}` : ''))
+  const verEtiquetasSueltas = (idEnt, skusMaster = [], idsSolo = [], motivo = '') => {
+    const params = new URLSearchParams()
+    if (skusMaster.length) params.set('master', skusMaster.join(','))
+    if (idsSolo.length) params.set('solo', idsSolo.join(','))
+    if (motivo) params.set('motivo', motivo)
+    const qs = params.toString()
+    navigate(`/entregas/${idEnt}/etiquetas-sueltas` + (qs ? `?${qs}` : ''))
+  }
   const verPacking = (idEnt) => navigate(`/entregas/${idEnt}/packing`)
 
   const confirmarFusion = async (idsSeleccionados) => {
