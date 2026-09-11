@@ -704,8 +704,8 @@ function NuevaEntrega({ toast, irDetalle }) {
                         title={t.ya_importada ? `Ya importado como ${t.sistema_existente} — clic para verlo` : ''}>
                         <span className="ov-num">{t.folio}</span>
                         <div className="ov-cliente" style={{lineHeight:1.35}}>
-                          <div style={{fontWeight:700}}>→ {t.destino || '(sin destino)'}</div>
-                          <div style={{fontSize:11,color:'var(--text3)'}}>Desde: {t.origen || '—'}</div>
+                          <div style={{fontWeight:700}}>Desde: {t.origen || '—'}</div>
+                          <div style={{fontSize:11,color:'var(--text3)'}}>Para: {t.destino || '—'}</div>
                         </div>
                         {t.ya_importada ? (
                           <span className="chip chip-ok">Ya importado · {t.sistema_existente}</span>
