@@ -103,6 +103,7 @@ function PanelAlmacenes({ toast }) {
   const [busqueda, setBusqueda] = useState('')
   const [resultados, setResultados] = useState(null)
   const [buscando, setBuscando] = useState(false)
+  const [tipoNuevo, setTipoNuevo] = useState('destino') // que tipo de vigilancia agregar
 
   const cargarConfigurados = () => api.listarAlmacenesConfigurados().then(setConfigurados).catch(e => toast(e.message, 'error'))
 
@@ -119,9 +120,9 @@ function PanelAlmacenes({ toast }) {
     try {
       await api.agregarAlmacen({
         odoo_warehouse_id: a.id, odoo_location_id: a.location_id,
-        nombre: a.nombre, codigo: a.codigo
+        nombre: a.nombre, codigo: a.codigo, tipo: tipoNuevo
       })
-      toast('Almacen agregado: ' + a.nombre, 'ok')
+      toast(`Almacen agregado como ${tipoNuevo}: ${a.nombre}`, 'ok')
       cargarConfigurados()
     } catch (e) { toast(e.message, 'error') }
   }
@@ -137,7 +138,7 @@ function PanelAlmacenes({ toast }) {
     catch (e) { toast(e.message, 'error') }
   }
 
-  const idsYaConfigurados = new Set((configurados || []).map(a => a.odoo_warehouse_id))
+  const idsYaConfiguradosComoTipo = new Set((configurados || []).map(a => a.odoo_warehouse_id + '|' + (a.tipo || 'destino')))
 
   return (
     <>
@@ -146,18 +147,19 @@ function PanelAlmacenes({ toast }) {
           Almacenes vigilados<span className="chip chip-ok">{configurados ? configurados.length : '…'}</span>
         </div>
         <p style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>
-          Solo los traspasos con destino a estos almacenes apareceran en la pestana "Traspasos" de Nueva entrega.
+          <b>Destino</b>: aparecen traspasos que LLEGAN a este almacen. <b>Origen</b>: aparecen traspasos que SALEN de este almacen, sin importar a donde vayan.
         </p>
         {!configurados ? <div className="cargando">Cargando...</div>
           : configurados.length === 0 ? <div className="vacio">Ninguno configurado todavia — busca abajo y agrega.</div>
           : (
           <table className="tabla">
-            <thead><tr><th>Nombre</th><th>Codigo</th><th>Estatus</th><th>Agrego</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Codigo</th><th>Tipo</th><th>Estatus</th><th>Agrego</th><th></th></tr></thead>
             <tbody>
               {configurados.map(a => (
                 <tr key={a.id}>
                   <td style={{fontWeight:700}}>{a.nombre}</td>
                   <td>{a.codigo}</td>
+                  <td><span className={'chip ' + (a.tipo === 'origen' ? 'chip-korei' : 'chip-raiker')}>{a.tipo === 'origen' ? 'Origen' : 'Destino'}</span></td>
                   <td><span className={a.activo ? 'chip chip-ok' : 'chip chip-warn'}>{a.activo ? 'activo' : 'pausado'}</span></td>
                   <td style={{fontSize:12,color:'var(--text3)'}}>{a.agregado_por}</td>
                   <td style={{display:'flex',gap:6}}>
@@ -173,8 +175,13 @@ function PanelAlmacenes({ toast }) {
 
       <div className="panel">
         <div className="panel-titulo">Buscar almacen en Odoo</div>
+        <label className="dim-label">Vigilar como</label>
+        <div className="cm-toggle" style={{marginBottom:14}}>
+          <span className={'cm-pill' + (tipoNuevo === 'destino' ? ' on' : '')} onClick={() => setTipoNuevo('destino')}>Destino</span>
+          <span className={'cm-pill' + (tipoNuevo === 'origen' ? ' on' : '')} onClick={() => setTipoNuevo('origen')}>Origen</span>
+        </div>
         <div style={{display:'flex',gap:8,marginBottom:12}}>
-          <input type="text" className="inp" placeholder="Ej. CEDIS, Expo, Meli..."
+          <input type="text" className="inp" placeholder="Ej. CEDIS, Expo, Meli, ALM-PT..."
             value={busqueda} onChange={e => setBusqueda(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && buscar()} />
           <button className="btn-principal" onClick={buscar} disabled={buscando}>{buscando ? 'Buscando...' : 'Buscar'}</button>
@@ -186,10 +193,10 @@ function PanelAlmacenes({ toast }) {
                 <div key={a.id} className="fila-ov">
                   <span className="ov-num">{a.codigo}</span>
                   <span className="ov-cliente">{a.nombre}</span>
-                  {idsYaConfigurados.has(a.id) ? (
-                    <span className="chip chip-ok">Ya agregado</span>
+                  {idsYaConfiguradosComoTipo.has(a.id + '|' + tipoNuevo) ? (
+                    <span className="chip chip-ok">Ya agregado como {tipoNuevo}</span>
                   ) : (
-                    <button className="btn-mini btn-mini-primario" onClick={() => agregar(a)}>+ Agregar</button>
+                    <button className="btn-mini btn-mini-primario" onClick={() => agregar(a)}>+ Agregar como {tipoNuevo}</button>
                   )}
                 </div>
               ))}
