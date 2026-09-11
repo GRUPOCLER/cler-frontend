@@ -1,346 +1,1717 @@
-import os, re, httpx
-from datetime import datetime, timedelta
-from parsers.sap_raiker import SUCURSALES as SUCURSALES_RAIKER
+import { useState, useEffect, useRef } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import * as api from './api.js'
+import Etiquetas from './Etiquetas.jsx'
+import EtiquetasSueltas from './EtiquetasSueltas.jsx'
+import ListaEmpaque from './ListaEmpaque.jsx'
+import AdminPanel from './AdminPanel.jsx'
+import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 
-ODOO_URL      = os.getenv("ODOO_URL", "")
-ODOO_DB       = os.getenv("ODOO_DB", "")
-ODOO_LOGIN    = os.getenv("ODOO_LOGIN", "")
-ODOO_PASSWORD = os.getenv("ODOO_API_KEY", "")
+// ── TOAST ────────────────────────────────────────────────
+// ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
+// ── MODAL: CONFIRMACION GENERICA ─────────────────────────
+// ── MENU DE ACCIONES SECUNDARIAS (dropdown) ──────────────
+function MenuAcciones({ acciones }) {
+  const [abierto, setAbierto] = useState(false)
+  const ref = useRef(null)
 
-# Ubicaciones destino de traspasos internos que interesan al almacen —
-# via variables de entorno para poder ajustarlas sin tocar codigo.
-def _destinos_traspaso():
-    raw = os.getenv("ODOO_UBICACIONES_TRASPASO", "29,69,117,125,133,165")
-    ids = []
-    for x in raw.split(","):
-        x = x.strip()
-        if x.isdigit():
-            ids.append(int(x))
-    return ids
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setAbierto(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
-DESTINOS_TRASPASO = _destinos_traspaso()
+  if (!acciones.length) return null
 
-# IDs de partner via variables de entorno — cada base de Odoo (prueba vs
-# productivo) numera sus registros distinto, asi que el cambio entre
-# ambientes NO requiere tocar codigo, solo actualizar estas 2 variables.
-def _partner_map():
-    mapa = {}
-    raiker_id = os.getenv("ODOO_PARTNER_RAIKER_ID", "11088")
-    korei_id  = os.getenv("ODOO_PARTNER_KOREI_ID", "12449")
-    if raiker_id.strip().isdigit():
-        mapa[int(raiker_id)] = "Raiker"
-    if korei_id.strip().isdigit():
-        mapa[int(korei_id)] = "Korei"
-    return mapa
+  return (
+    <div className="menu-acciones-wrap" ref={ref}>
+      <button className="btn-sec" onClick={() => setAbierto(a => !a)}>Mas acciones ⌄</button>
+      {abierto && (
+        <div className="menu-acciones-pop">
+          {acciones.map((a, i) => (
+            <button key={i} className="menu-acciones-item"
+              style={a.peligro ? {color:'var(--rojo)'} : undefined}
+              onClick={() => { setAbierto(false); a.onClick() }}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-PARTNER_MAP = _partner_map()
+// ── AVISO FLOTANTE: nueva solicitud pendiente de autorizar ────
+function AvisoPendiente({ aviso, onVer, onCerrar }) {
+  if (!aviso) return null
+  return (
+    <div className="aviso-flotante">
+      <div className="aviso-icono">⚠</div>
+      <div className="aviso-texto">
+        <div className="aviso-titulo">
+          {aviso.cantidadNueva === 1 ? 'Nueva solicitud pendiente' : `${aviso.cantidadNueva} solicitudes nuevas pendientes`}
+        </div>
+        <div className="aviso-sub">Requiere tu autorizacion — {aviso.total} en total</div>
+      </div>
+      <button className="aviso-btn-ver" onClick={onVer}>Ver</button>
+      <button className="aviso-btn-cerrar" onClick={onCerrar}>✕</button>
+    </div>
+  )
+}
 
-async def _rpc(model: str, method: str, args: list, kwargs: dict = None):
-    if not ODOO_URL:
-        raise Exception(
-            "ODOO_URL no esta configurada en las variables de Railway. "
-            "Revisa el servicio cler-backend -> Variables."
-        )
-    async with httpx.AsyncClient(timeout=15) as client:
-        payload = {
-            "jsonrpc": "2.0", "method": "call",
-            "params": {
-                "service": "object", "method": "execute_kw",
-                "args": [ODOO_DB, await _uid(client), ODOO_PASSWORD, model, method, args, kwargs or {}]
-            }
-        }
-        r = await client.post(ODOO_URL + "/jsonrpc", json=payload)
-        r.raise_for_status()
-        data = r.json()
-        if "error" in data:
-            raise Exception(data["error"].get("data", {}).get("message", "Error Odoo"))
-        return data["result"]
+// ── MODAL: MOTIVO DE ENTREGA PARCIAL ──────────────────────
+function ModalEntregaParcial({ excluidos, onClose, onConfirmar }) {
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const valido = motivo.trim().length >= 5
 
-_uid_cache = {}
-async def _uid(client: httpx.AsyncClient):
-    if "uid" in _uid_cache:
-        return _uid_cache["uid"]
-    payload = {
-        "jsonrpc": "2.0", "method": "call",
-        "params": {
-            "service": "common", "method": "login",
-            "args": [ODOO_DB, ODOO_LOGIN, ODOO_PASSWORD]
-        }
+  const confirmar = async () => {
+    if (!valido || enviando) return
+    setEnviando(true)
+    try { await onConfirmar(motivo.trim()) }
+    finally { setEnviando(false) }
+  }
+
+  return (
+    <Modal titulo="Entrega parcial" sub="Dejaste productos sin marcar — se quedaran pendientes en esta entrega" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
+        <button className="btn-principal" onClick={confirmar} disabled={!valido || enviando}>
+          {enviando ? 'Generando...' : 'Confirmar e imprimir'}
+        </button>
+      </>}>
+      <div style={{fontSize:12,color:'var(--text3)',marginBottom:10,lineHeight:1.5}}>
+        Estos productos <b>no</b> se van a imprimir ni marcar como entregados ahora:
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:14,maxHeight:140,overflowY:'auto'}}>
+        {excluidos.map(p => (
+          <div key={p.id_producto} style={{fontSize:12,padding:'5px 8px',background:'var(--bg3)',borderRadius:6}}>
+            <b>{p.clave}</b> — {p.descripcion}
+          </div>
+        ))}
+      </div>
+      <label className="dim-label">Motivo de la entrega parcial</label>
+      <textarea className="inp" rows={3} placeholder="Ej. Faltante de stock, se completa despues"
+        value={motivo} onChange={e => setMotivo(e.target.value)} disabled={enviando} autoFocus />
+      {motivo.trim().length > 0 && !valido && (
+        <div style={{fontSize:11,color:'#ef4444',marginTop:6}}>Escribe al menos 5 caracteres</div>
+      )}
+    </Modal>
+  )
+}
+
+// ── MODAL: ELIMINAR ENTREGA (exige motivo, solo Admin) ────
+function ModalEliminarEntrega({ numEntrega, onClose, onConfirmar }) {
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const valido = motivo.trim().length >= 5
+
+  const confirmar = async () => {
+    if (!valido || enviando) return
+    setEnviando(true)
+    try { await onConfirmar(motivo.trim()) }
+    finally { setEnviando(false) }
+  }
+
+  return (
+    <Modal titulo="Eliminar entrega" sub={`Esta a punto de eliminar ${numEntrega} de forma permanente`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
+        <button className="btn-principal" style={{background:'var(--rojo)',color:'#fff'}}
+          onClick={confirmar} disabled={!valido || enviando}>
+          {enviando ? 'Eliminando...' : 'Eliminar entrega'}
+        </button>
+      </>}>
+      <div style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>
+        Esta accion no se puede deshacer — se borran tambien sus productos, tarimas y cajas.
+        Escribe el motivo de la eliminacion (queda guardado en la Bitacora).
+      </div>
+      <label className="dim-label">Motivo</label>
+      <textarea className="inp" rows={3} placeholder="Ej. Entrega duplicada por error al importar el PDF"
+        value={motivo} onChange={e => setMotivo(e.target.value)} disabled={enviando} autoFocus />
+      {motivo.trim().length > 0 && !valido && (
+        <div style={{fontSize:11,color:'#ef4444',marginTop:6}}>Escribe al menos 5 caracteres</div>
+      )}
+    </Modal>
+  )
+}
+
+function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro, onClose, onConfirmar }) {
+  return (
+    <Modal titulo={titulo} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className={peligro ? 'btn-mini' : 'btn-principal'}
+          style={peligro ? {background:'var(--rojo)',color:'#fff'} : undefined}
+          onClick={onConfirmar}>{textoConfirmar}</button>
+      </>}>
+      <p style={{fontSize:13,color:'var(--text2)',lineHeight:1.5}}>{mensaje}</p>
+    </Modal>
+  )
+}
+
+// ── MODAL: CORREGIR SISTEMA (TAR/CS/MIX) ──────────────────
+function ModalCambioSistema({ sistemaActual, onClose, onConfirmar }) {
+  const opciones = [
+    { valor: 'TAR', nombre: 'Carga agrupada' },
+    { valor: 'CS',  nombre: 'Carga suelta' },
+    { valor: 'MIX', nombre: 'Mixto' },
+  ].filter(o => o.valor !== sistemaActual)
+  const [nuevo, setNuevo] = useState(opciones[0]?.valor || '')
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  const confirmar = async () => {
+    setEnviando(true)
+    await onConfirmar(nuevo, motivo.trim())
+    setEnviando(false)
+  }
+
+  return (
+    <Modal titulo="Corregir tipo de entrega" sub={`Actualmente: ${sistemaActual}`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" disabled={!motivo.trim() || enviando} onClick={confirmar}>
+          {enviando ? 'Enviando...' : 'Solicitar cambio'}
+        </button>
+      </>}>
+      <label className="dim-label">Cambiar a</label>
+      <select className="inp" style={{marginBottom:12}} value={nuevo} onChange={e => setNuevo(e.target.value)}>
+        {opciones.map(o => <option key={o.valor} value={o.valor}>{o.nombre}</option>)}
+      </select>
+      <label className="dim-label">Motivo de la correccion</label>
+      <textarea className="inp" rows={3} style={{resize:'vertical'}} value={motivo}
+        onChange={e => setMotivo(e.target.value)} autoFocus />
+      <p style={{fontSize:11,color:'var(--text3)',marginTop:10,lineHeight:1.5}}>
+        Si tu usuario no es Gerente o Administrador, esto crea una solicitud pendiente de autorizacion.
+      </p>
+    </Modal>
+  )
+}
+
+function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const confirmar = async () => {
+    setEnviando(true)
+    await onConfirmar(motivo.trim())
+    setEnviando(false)
+  }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-titulo">Justificar reimpresion</div>
+            <div className="modal-sub">{mensaje}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <label className="dim-label">Motivo de la reimpresion</label>
+          <textarea className="inp" rows={3} style={{resize:'vertical'}} value={motivo}
+            onChange={e => setMotivo(e.target.value)} autoFocus />
+        </div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Cancelar</button>
+          <button className="btn-principal" disabled={!motivo.trim() || enviando} onClick={confirmar}>
+            {enviando ? 'Enviando...' : 'Enviar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function useToast() {
+  const [msg, setMsg] = useState(null)
+  const show = (texto, tipo = 'ok') => {
+    setMsg({ texto, tipo })
+    setTimeout(() => setMsg(null), 3200)
+  }
+  const Toast = () => msg
+    ? <div className={'toast ' + msg.tipo}>{msg.texto}</div>
+    : null
+  return [show, Toast]
+}
+
+// ── LOGIN ────────────────────────────────────────────────
+function Login({ onOk }) {
+  const [usuario, setUsuario] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [cargando, setCargando] = useState(false)
+
+  const entrar = async (e) => {
+    e.preventDefault()
+    setError(''); setCargando(true)
+    try {
+      await api.login(usuario, password)
+      onOk()
+    } catch (err) {
+      setError(err.message)
+    } finally { setCargando(false) }
+  }
+
+  return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <div className="login-marca">GRUPO<span>CLER</span></div>
+        <div className="login-sub">Sistema operativo de almacen</div>
+        <form className="login-form" onSubmit={entrar}>
+          <input className="inp" placeholder="Usuario o correo" value={usuario}
+            onChange={e => setUsuario(e.target.value)} autoFocus />
+          <input className="inp" type="password" placeholder="Contrasena"
+            value={password} onChange={e => setPassword(e.target.value)} />
+          {error && <div className="login-error">{error}</div>}
+          <button className="btn-principal" disabled={cargando || !usuario || !password}>
+            {cargando ? 'Verificando...' : 'Iniciar sesion'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── DASHBOARD ────────────────────────────────────────────
+// Un solo color para toda fusion — la adyacencia fisica de filas ya distingue
+// grupos entre si; el color solo indica "esta fusionada", no "cual grupo"
+const COLOR_FUSION = '#4A9FE0'
+
+function agruparPorFusion(entregas) {
+  const emitidos = new Set()
+  const resultado = []
+
+  entregas.forEach(e => {
+    if (emitidos.has(e.id_entrega)) return
+    if (e.grupo_fusion) {
+      const delGrupo = entregas.filter(x => x.grupo_fusion === e.grupo_fusion)
+      delGrupo.forEach(x => { emitidos.add(x.id_entrega); resultado.push({ ...x, colorFusion: COLOR_FUSION }) })
+    } else {
+      emitidos.add(e.id_entrega)
+      resultado.push(e)
     }
-    r = await client.post(ODOO_URL + "/jsonrpc", json=payload)
-    r.raise_for_status()
-    data = r.json()
-    uid = data.get("result")
-    if not uid:
-        raise Exception("No se pudo autenticar en Odoo: " + str(data.get("error", "")))
-    _uid_cache["uid"] = uid
-    return uid
+  })
+  return resultado
+}
 
-async def listar_ovs_pendientes(warehouse_ids: list = None):
-    fecha_limite = (datetime.now() - timedelta(days=45)).strftime("%Y-%m-%d")
-    dominio = [["picking_ids", "!=", False], ["state", "in", ["sale", "done"]], ["date_order", ">=", fecha_limite]]
-    if warehouse_ids:
-        dominio.append(["warehouse_id", "in", warehouse_ids])
-    ovs = await _rpc("sale.order", "search_read",
-        [dominio],
-        {"fields": ["name", "partner_id", "state", "picking_ids", "date_order", "warehouse_id"], "order": "id desc", "limit": 1500}
-    )
-    return [{
-        "num_ov": ov["name"],
-        "cliente": ov["partner_id"][1] if ov.get("partner_id") else "",
-        "comercializador": PARTNER_MAP.get(ov["partner_id"][0] if ov.get("partner_id") else None, ""),
-        "fecha": (ov.get("date_order") or "")[:10],
-        "almacen": ov["warehouse_id"][1] if ov.get("warehouse_id") else "",
-        "picking_ids": ov["picking_ids"]
-    } for ov in ovs]
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+const FUENTE_LABEL = { odoo: 'Odoo', pdf: 'PDF importado', manual: 'Manual' }
 
-def _detectar_sucursal_raiker(nombre_contacto: str) -> str:
-    """Detecta la sucursal Raiker (Boca, Boticaria, Tejeria, etc.) a partir
-    del nombre del contacto de envio en Odoo. El contacto normalmente viene
-    formateado como 'AGROINDUSTRIAS RAIKER, BOCA' — el nombre de la
-    sucursal despues de la coma."""
-    if not nombre_contacto:
-        return ""
-    texto = nombre_contacto.upper()
-    if "," in texto:
-        candidato = texto.split(",")[-1].strip()
-        for s in SUCURSALES_RAIKER:
-            if candidato == s or candidato.startswith(s):
-                return s
-    # Respaldo: busca cualquier sucursal conocida mencionada en el nombre completo
-    for s in SUCURSALES_RAIKER:
-        if s in texto:
-            return s
-    return ""
+function agruparPorMes(entregas) {
+  const grupos = []
+  let claveActual = null
+  entregas.forEach(e => {
+    const fecha = e.fecha_creacion ? new Date(e.fecha_creacion) : null
+    const clave = fecha ? `${MESES[fecha.getMonth()]} ${fecha.getFullYear()}` : 'Sin fecha'
+    if (clave !== claveActual) {
+      grupos.push({ mes: clave, filas: [] })
+      claveActual = clave
+    }
+    grupos[grupos.length - 1].filas.push(e)
+  })
+  return grupos
+}
 
+function Dashboard({ irDetalle, onFusionar }) {
+  const [stats, setStats] = useState(null)
+  const [entregas, setEntregas] = useState(null)
+  const [filtros, setFiltros] = useState({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '', buscar: '' })
+  const [buscarTexto, setBuscarTexto] = useState('')
 
-async def cargar_entrega(picking_ids: list):
-    picks = await _rpc("stock.picking", "search_read",
-        [[["id", "in", picking_ids]]],
-        {"fields": ["name", "partner_id", "sale_id", "move_ids", "state"]}
-    )
-    if not picks:
-        raise Exception("La OV no tiene entregas")
-    p = picks[0]
-    validada = p.get("state") == "done"
-    moves = await _rpc("stock.move", "search_read",
-        [[["id", "in", p["move_ids"]]]],
-        {"fields": ["product_id", "product_uom_qty", "quantity", "name"]}
-    )
-    productos = []
-    for m in moves:
-        # Si la entrega ya esta validada ("Hecho"), usamos la cantidad REAL
-        # que se surtio (campo "quantity") — no lo que se pidio originalmente
-        # ("product_uom_qty"/Demanda). Asi los productos que no se pudieron
-        # surtir (faltante de stock, etc.) no salen en las etiquetas.
-        # Si todavia no esta validada, no hay cantidad real aun, usamos la
-        # demanda como respaldo (comportamiento anterior).
-        cantidad = m.get("quantity", 0) if validada else m.get("product_uom_qty", 0)
-        if cantidad <= 0:
-            continue
-        nombre = m["product_id"][1] if m.get("product_id") else m["name"]
-        match = re.match(r"^\[([^\]]+)\]", nombre)
-        clave = match.group(1).strip() if match else nombre.split(" ")[0]
-        desc  = nombre.replace(match.group(0), "").strip() if match else nombre
-        productos.append({
-            "clave": clave, "descripcion": desc,
-            "cantidad_total": round(cantidad), "unidad": "PZA"
-        })
+  const cargar = () => {
+    const params = new URLSearchParams({ limite: '200' })
+    if (filtros.estatus) params.set('estatus', filtros.estatus)
+    if (filtros.sistema) params.set('sistema', filtros.sistema)
+    if (filtros.fuente)  params.set('fuente', filtros.fuente)
+    if (filtros.desde)   params.set('fecha_desde', filtros.desde)
+    if (filtros.hasta)   params.set('fecha_hasta', filtros.hasta)
+    if (filtros.buscar)  params.set('buscar', filtros.buscar)
+    api.listarEntregas(params.toString()).then(d => setEntregas(agruparPorFusion(d))).catch(() => setEntregas([]))
+  }
 
-    # Direccion de entrega real: viene del campo "partner_shipping_id" de la
-    # orden de venta (Odoo estandar), no del cliente general de la OV.
-    direccion = p["partner_id"][1] if p.get("partner_id") else ""
-    sucursal_detectada = ""
-    if p.get("sale_id"):
-        try:
-            ov = await _rpc("sale.order", "search_read",
-                [[["id", "=", p["sale_id"][0]]]],
-                {"fields": ["partner_shipping_id"]}
-            )
-            if ov and ov[0].get("partner_shipping_id"):
-                id_envio = ov[0]["partner_shipping_id"][0]
-                contactos = await _rpc("res.partner", "search_read",
-                    [[["id", "=", id_envio]]],
-                    {"fields": ["name", "street", "street2", "city", "state_id", "zip", "country_id"]}
+  useEffect(() => {
+    api.getDashboard().then(setStats).catch(() => setStats({}))
+  }, [])
+
+  useEffect(() => { cargar() }, [filtros])
+
+  // Debounce: espera a que el usuario deje de escribir antes de buscar
+  useEffect(() => {
+    const t = setTimeout(() => actualizarFiltro('buscar', buscarTexto), 400)
+    return () => clearTimeout(t)
+  }, [buscarTexto])
+
+  const actualizarFiltro = (campo, valor) => setFiltros(f => ({ ...f, [campo]: valor }))
+  const hayFiltrosActivos = Object.values(filtros).some(v => v)
+  const grupos = entregas ? agruparPorMes(entregas) : []
+
+  return (
+    <div className="contenedor">
+      <div className="titulo-pag">Inicio</div>
+      <div className="sub-pag">Actividad y entregas recientes</div>
+
+      <div className="stats">
+        <div className="stat">
+          <div className="stat-num">{stats ? stats.total_entregas ?? 0 : '—'}</div>
+          <div className="stat-label">Entregas totales</div>
+        </div>
+        <div className="stat">
+          <div className="stat-num">{stats ? stats.total_piezas ?? 0 : '—'}</div>
+          <div className="stat-label">Piezas procesadas</div>
+        </div>
+        <div className="stat">
+          <div className="stat-num">{stats ? stats.entregas_mes ?? 0 : '—'}</div>
+          <div className="stat-label">Entregas este mes</div>
+        </div>
+      </div>
+
+      <div className="panel panel-filtros">
+        <div className="panel-titulo">
+          <span className="filtros-icono">⚗</span> Filtros
+          {hayFiltrosActivos && (
+            <button className="btn-quitar-mini" style={{marginLeft:'auto'}}
+              onClick={() => { setBuscarTexto(''); setFiltros({ estatus: '', sistema: '', fuente: '', desde: '', hasta: '', buscar: '' }) }}>
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+        <div className="filtros-toolbar">
+          <div className="filtro-campo" style={{minWidth:220,flex:2}}>
+            <label>Buscar por folio, OV o traslado</label>
+            <input type="text" placeholder="Ej. CS-2608..., S104773, REM SYG/INT/00032"
+              value={buscarTexto} onChange={e => setBuscarTexto(e.target.value)} />
+          </div>
+          <div className="filtro-campo">
+            <label>Desde</label>
+            <input type="date" value={filtros.desde} onChange={e => actualizarFiltro('desde', e.target.value)} />
+          </div>
+          <div className="filtro-campo">
+            <label>Hasta</label>
+            <input type="date" value={filtros.hasta} onChange={e => actualizarFiltro('hasta', e.target.value)} />
+          </div>
+          <div className="filtro-campo">
+            <label>Estatus</label>
+            <select value={filtros.estatus} onChange={e => actualizarFiltro('estatus', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="completada">Completada</option>
+            </select>
+          </div>
+          <div className="filtro-campo">
+            <label>Sistema</label>
+            <select value={filtros.sistema} onChange={e => actualizarFiltro('sistema', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="TAR">Carga agrupada</option>
+              <option value="CS">Carga suelta</option>
+              <option value="MIX">Mixto</option>
+            </select>
+          </div>
+          <div className="filtro-campo">
+            <label>Tipo de orden</label>
+            <select value={filtros.fuente} onChange={e => actualizarFiltro('fuente', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="odoo">Odoo</option>
+              <option value="pdf">PDF importado</option>
+              <option value="manual">Manual</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-titulo">
+          Entregas
+          {entregas && <span className="chip chip-ok">{entregas.length}</span>}
+          <button className="btn-quitar-mini" style={{marginLeft:'auto'}} onClick={onFusionar}>
+            Fusionar entregas
+          </button>
+        </div>
+        {!entregas ? <div className="cargando">Cargando...</div>
+          : entregas.length === 0 ? <div className="vacio">
+              {hayFiltrosActivos ? 'Sin entregas con estos filtros.' : 'Sin entregas todavia. Crea la primera desde Nueva entrega.'}
+            </div>
+          : grupos.map(grupo => (
+            <div key={grupo.mes} style={{marginBottom:18}}>
+              <div className="mes-encabezado">{grupo.mes}</div>
+              <table className="tabla">
+                <thead><tr>
+                  <th>Folio</th><th>Sistema</th><th>Cliente</th><th>Fecha</th><th>Origen</th><th>Estatus</th>
+                </tr></thead>
+                <tbody>
+                  {grupo.filas.map((e, i) => {
+                    const anterior = grupo.filas[i - 1]
+                    const nuevoGrupo = e.grupo_fusion && anterior?.grupo_fusion && anterior.grupo_fusion !== e.grupo_fusion
+                    return (
+                    <tr key={e.id_entrega} onClick={() => irDetalle(e.id_entrega)}
+                      style={{
+                        ...(e.colorFusion ? {
+                          background: e.colorFusion + '14',
+                          borderLeft: '3px solid ' + e.colorFusion
+                        } : {}),
+                        ...(nuevoGrupo ? { borderTop: '2px solid var(--border2)' } : {})
+                      }}>
+                      <td>
+                        <span style={{fontWeight:700}}>{e.num_entrega}</span>
+                        {e.es_fusion && (
+                          <span className="chip" style={{background:e.colorFusion+'22',color:e.colorFusion,marginLeft:6,cursor:'help'}}
+                            title={'Fusionada con: ' + e.fusion_con.join(', ')}>
+                            🔗 +{e.fusion_con.length}
+                          </span>
+                        )}
+                      </td>
+                      <td><span className={'badge-sistema badge-' + e.sistema}>{e.sistema}</span></td>
+                      <td>{e.nombre_cliente || '—'}</td>
+                      <td style={{fontSize:12,color:'var(--text3)'}}>
+                        {api.formatearFecha(e.fecha_creacion, false)}</td>
+                      <td style={{fontSize:12,color:'var(--text3)'}}>{FUENTE_LABEL[e.fuente] || e.fuente || '—'}</td>
+                      <td><span className={'badge-estatus badge-' + e.estatus}>{e.estatus}</span></td>
+                    </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
+      </div>
+    </div>
+  )
+}
+
+// ── NUEVA ENTREGA (unificada TAR / CS / MIX) ─────────────
+const SISTEMAS = [
+  { cod: 'TAR', nombre: 'Carga agrupada', desc: 'Embarque agrupado en tarimas o cajas, con cierre por categoria.', color: 'var(--tar)' },
+  { cod: 'CS',  nombre: 'Carga suelta', desc: 'Piezas individuales o cajas master con etiquetado unitario.',    color: 'var(--cs)' },
+  { cod: 'MIX', nombre: 'OV mixta',     desc: 'Una orden con carga agrupada y carga suelta en el mismo embarque.', color: 'var(--mix)' },
+]
+
+function NuevaEntrega({ toast, irDetalle }) {
+  const [sistema, setSistema] = useState('CS')
+  const [odoo, setOdoo] = useState({ activa: false, usuario: '' })
+  const [ovs, setOvs] = useState(null)
+  const [mostrarUsadas, setMostrarUsadas] = useState(false)
+  const [modoOdoo, setModoOdoo] = useState('ovs') // 'ovs' | 'traspasos'
+  const [traspasos, setTraspasos] = useState(null)
+  const [mostrarUsadosTraspaso, setMostrarUsadosTraspaso] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
+  const [buscarTexto, setBuscarTexto] = useState('')
+  const [resultadosBusqueda, setResultadosBusqueda] = useState(null)
+  const fileRef = useRef()
+
+  useEffect(() => {
+    if (!buscarTexto.trim()) { setResultadosBusqueda(null); return }
+    const t = setTimeout(() => {
+      api.buscarEntregas(buscarTexto.trim()).then(setResultadosBusqueda).catch(() => setResultadosBusqueda([]))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [buscarTexto])
+
+  useEffect(() => {
+    api.odooSesion().then(s => {
+      setOdoo(s)
+      if (s.activa) {
+        api.odooListarOVs().then(setOvs).catch(() => setOvs([]))
+        api.odooListarTraspasos().then(setTraspasos).catch(() => setTraspasos([]))
+      }
+    })
+  }, [])
+
+  const importarOdoo = async (ov) => {
+    if (ov.ya_importada) { irDetalle(ov.id_entrega_existente); return }
+    try {
+      toast('Cargando ' + ov.num_ov + ' desde Odoo...')
+      const datos = await api.odooCargarEntrega(ov.picking_ids)
+      const res = await api.crearEntrega({ ...datos, sistema, fuente: 'odoo' })
+      toast(datos.productos.length + ' productos importados', 'ok')
+      irDetalle(res.id_entrega)
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const importarTraspaso = async (t) => {
+    if (t.ya_importada) { irDetalle(t.id_entrega_existente); return }
+    try {
+      toast('Cargando traspaso ' + t.folio + '...')
+      const datos = await api.odooCargarTraspaso(t.id)
+      const res = await api.crearEntrega({ ...datos, sistema, fuente: 'odoo' })
+      toast(datos.productos.length + ' productos importados', 'ok')
+      irDetalle(res.id_entrega)
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const subirArchivo = async (archivo) => {
+    if (!archivo || archivo.type !== 'application/pdf') {
+      toast('Selecciona un archivo PDF', 'error'); return
+    }
+    setSubiendo(true)
+    try {
+      const res = await api.subirPDF(archivo, sistema, '')
+      toast(res.total + ' productos extraidos del PDF', 'ok')
+      irDetalle(res.id_entrega)
+    } catch (e) { toast(e.message, 'error') }
+    finally { setSubiendo(false) }
+  }
+
+  return (
+    <div className="contenedor">
+      <div className="titulo-pag">Nueva entrega</div>
+      <div className="sub-pag">Elige como va el embarque y de donde vienen los datos</div>
+
+      <div className="panel">
+        <div className="panel-titulo">Buscar movimiento</div>
+        <input type="text" className="inp" placeholder="Folio, OV o traslado — filtra tu sistema y la lista de Odoo de abajo"
+          value={buscarTexto} onChange={e => setBuscarTexto(e.target.value)} />
+        {resultadosBusqueda && (
+          resultadosBusqueda.length === 0 ? (
+            <div className="vacio" style={{padding:'14px 4px 0'}}>Sin coincidencias en tu sistema — puedes continuar creando la entrega.</div>
+          ) : (
+            <div className="lista-scroll" style={{marginTop:12}}>
+              {resultadosBusqueda.map(e => (
+                <div key={e.id_entrega} className="fila-ov" onClick={() => irDetalle(e.id_entrega)}>
+                  <span className="ov-num">{e.num_entrega}</span>
+                  <span className="ov-cliente">{e.nombre_cliente || e.orden || '—'}</span>
+                  <span className={'badge-sistema badge-' + e.sistema}>{e.sistema}</span>
+                  <span className={'badge-estatus badge-' + e.estatus}>{e.estatus}</span>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+
+      <div className="selector-sistema">
+        {SISTEMAS.map(s => (
+          <button key={s.cod}
+            className={'tarjeta-sistema' + (sistema === s.cod ? ' sel' : '')}
+            style={{ '--c': s.color }}
+            onClick={() => setSistema(s.cod)}>
+            <div className="ts-codigo">{s.cod}</div>
+            <div className="ts-nombre">{s.nombre}</div>
+            <div className="ts-desc">{s.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="panel">
+        <div className="panel-titulo">
+          Importar desde Odoo
+          {odoo.activa
+            ? <span className="chip chip-ok">Conectado · {odoo.usuario}</span>
+            : <span className="chip chip-warn">Sin sesion</span>}
+          {odoo.activa && (
+            <button className="btn-quitar-mini" style={{marginLeft:'auto'}} onClick={() => {
+              setOvs(null); setTraspasos(null)
+              api.odooListarOVs().then(setOvs).catch(() => setOvs([]))
+              api.odooListarTraspasos().then(setTraspasos).catch(() => setTraspasos([]))
+            }}>Actualizar desde Odoo</button>
+          )}
+        </div>
+
+        {odoo.activa && (
+          <div className="topbar-nav" style={{marginBottom:14}}>
+            <button className={'nav-btn' + (modoOdoo === 'ovs' ? ' activo' : '')} onClick={() => setModoOdoo('ovs')}>
+              OVs {ovs ? `(${ovs.length})` : ''}
+            </button>
+            <button className={'nav-btn' + (modoOdoo === 'traspasos' ? ' activo' : '')} onClick={() => setModoOdoo('traspasos')}>
+              Traspasos {traspasos ? `(${traspasos.length})` : ''}
+            </button>
+          </div>
+        )}
+
+        {!odoo.activa ? (
+          <div className="vacio">
+            Inicia sesion en <a href="https://ecor-b2b-35977843.dev.odoo.com" target="_blank"
+              rel="noreferrer" style={{color:'var(--amarillo)'}}>Odoo</a> en
+            otra pestana y recarga esta pagina. Solo movimientos Raiker y Korei.
+          </div>
+        ) : modoOdoo === 'ovs' ? (
+          <>
+            {ovs && ovs.some(o => o.ya_importada) && (
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--text3)',cursor:'pointer',marginBottom:10}}>
+                <input type="checkbox" checked={mostrarUsadas} onChange={e => setMostrarUsadas(e.target.checked)} />
+                Mostrar ya importadas
+              </label>
+            )}
+            {!ovs ? <div className="cargando">Buscando OVs pendientes...</div>
+              : ovs.length === 0 ? <div className="vacio">Sin OVs pendientes de Raiker o Korei.</div>
+              : (() => {
+                const termino = buscarTexto.trim().toLowerCase()
+                // Al buscar algo especifico, se ignora el filtro de "ocultar ya importadas"
+                // — si estas buscando una OV puntual, debe aparecer sin importar su estatus.
+                let visibles = (mostrarUsadas || termino) ? ovs : ovs.filter(o => !o.ya_importada)
+                if (termino) {
+                  visibles = visibles.filter(o =>
+                    (o.num_ov || '').toLowerCase().includes(termino) ||
+                    (o.cliente || '').toLowerCase().includes(termino)
+                  )
+                }
+                return visibles.length === 0 ? (
+                  <div className="vacio">
+                    {termino ? `Sin coincidencias en Odoo para "${buscarTexto}".` : 'Todas las OVs pendientes ya fueron importadas.'}
+                  </div>
+                ) : (
+                  <div className="lista-scroll">
+                    {visibles.map(ov => (
+                      <div key={ov.num_ov} className={'fila-ov' + (ov.ya_importada ? ' fila-ov-usada' : '')}
+                        onClick={() => importarOdoo(ov)}
+                        title={ov.ya_importada ? `Ya importada como ${ov.sistema_existente} — clic para verla` : ''}>
+                        <span className="ov-num">{ov.num_ov}</span>
+                        <span className="ov-cliente">{ov.cliente}</span>
+                        {ov.ya_importada ? (
+                          <span className="chip chip-ok">Ya importada · {ov.sistema_existente}</span>
+                        ) : (
+                          <span className={'chip chip-' + ov.comercializador.toLowerCase()}>{ov.comercializador}</span>
+                        )}
+                        <span className="ov-fecha">{ov.fecha}</span>
+                      </div>
+                    ))}
+                  </div>
                 )
-                if contactos:
-                    c = contactos[0]
-                    partes = [
-                        c.get("street"), c.get("street2"), c.get("city"),
-                        c["state_id"][1] if c.get("state_id") else None,
-                        c.get("zip"),
-                        c["country_id"][1] if c.get("country_id") else None,
-                    ]
-                    direccion_armada = ", ".join(x for x in partes if x)
-                    if direccion_armada:
-                        direccion = direccion_armada
-                    sucursal_detectada = _detectar_sucursal_raiker(c.get("name", ""))
-        except Exception:
-            pass  # si algo falla, se queda con el nombre del cliente como respaldo
+              })()}
+          </>
+        ) : (
+          <>
+            {traspasos && traspasos.some(t => t.ya_importada) && (
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--text3)',cursor:'pointer',marginBottom:10}}>
+                <input type="checkbox" checked={mostrarUsadosTraspaso} onChange={e => setMostrarUsadosTraspaso(e.target.checked)} />
+                Mostrar ya importados
+              </label>
+            )}
+            {!traspasos ? <div className="cargando">Buscando traspasos pendientes...</div>
+              : traspasos.length === 0 ? <div className="vacio">
+                  Sin traspasos pendientes hacia los almacenes vigilados. Si esperabas ver alguno, revisa
+                  Administracion → Almacenes de traspaso.
+                </div>
+              : (() => {
+                const termino = buscarTexto.trim().toLowerCase()
+                let visibles = (mostrarUsadosTraspaso || termino) ? traspasos : traspasos.filter(t => !t.ya_importada)
+                if (termino) {
+                  visibles = visibles.filter(t =>
+                    (t.folio || '').toLowerCase().includes(termino) ||
+                    (t.destino || '').toLowerCase().includes(termino) ||
+                    (t.origen || '').toLowerCase().includes(termino) ||
+                    (t.referencia || '').toLowerCase().includes(termino)
+                  )
+                }
+                return visibles.length === 0 ? (
+                  <div className="vacio">
+                    {termino ? `Sin coincidencias en Odoo para "${buscarTexto}".` : 'Todos los traspasos pendientes ya fueron importados.'}
+                  </div>
+                ) : (
+                  <div className="lista-scroll">
+                    {visibles.map(t => (
+                      <div key={t.id} className={'fila-ov' + (t.ya_importada ? ' fila-ov-usada' : '')}
+                        onClick={() => importarTraspaso(t)}
+                        title={t.ya_importada ? `Ya importado como ${t.sistema_existente} — clic para verlo` : ''}>
+                        <span className="ov-num">{t.folio}</span>
+                        <div className="ov-cliente" style={{lineHeight:1.35}}>
+                          <div style={{fontWeight:700}}>Desde: {t.origen || '—'}</div>
+                          <div style={{fontSize:11,color:'var(--text3)'}}>Para: {t.destino || '—'}</div>
+                        </div>
+                        {t.ya_importada ? (
+                          <span className="chip chip-ok">Ya importado · {t.sistema_existente}</span>
+                        ) : (
+                          <span className="chip chip-warn">{t.estado}</span>
+                        )}
+                        <span className="ov-fecha">{t.fecha}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+          </>
+        )}
+      </div>
 
-    return {
-        "num_entrega": p["name"],
-        "orden": p["sale_id"][1] if p.get("sale_id") else "",
-        "nombre_cliente": p["partner_id"][1] if p.get("partner_id") else "",
-        "direccion": direccion,
-        "sucursal": sucursal_detectada,
-        "comercializador": PARTNER_MAP.get(p["partner_id"][0] if p.get("partner_id") else None, ""),
-        "fuente": "odoo",
-        "productos": productos
-    }
+      <div className="panel">
+        <div className="panel-titulo">Importar desde PDF</div>
+        <div className="dropzone"
+          onClick={() => fileRef.current.click()}
+          onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('over') }}
+          onDragLeave={e => e.currentTarget.classList.remove('over')}
+          onDrop={e => {
+            e.preventDefault(); e.currentTarget.classList.remove('over')
+            subirArchivo(e.dataTransfer.files[0])
+          }}>
+          {subiendo ? 'Procesando PDF...'
+            : 'Arrastra aqui el PDF de la entrega (ECOR u orden SAP Raiker) o haz clic para elegirlo'}
+        </div>
+        <input ref={fileRef} type="file" accept="application/pdf" hidden
+          onChange={e => subirArchivo(e.target.files[0])} />
+      </div>
+    </div>
+  )
+}
 
-# ── TRASPASOS INTERNOS (CEDIS, FULL MELI, Eventos y Expo) ────────
-def _frag(x):
-    """Un 'fragmento' de dominio de Odoo: si ya es un compuesto (empieza con
-    &/|/!) se pasa tal cual; si es una sola condicion, ocupa un solo lugar."""
-    if isinstance(x[0], str) and x[0] in ("&", "|", "!"):
-        return x
-    return [x]
+// ── MODAL GENERICO ────────────────────────────────────────
+export function Modal({ titulo, sub, onClose, children, footer }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-titulo">{titulo}</div>
+            {sub && <div className="modal-sub">{sub}</div>}
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-foot">{footer}</div>}
+      </div>
+    </div>
+  )
+}
 
-def _and(*partes):
-    slots = []
-    for p in partes:
-        slots += _frag(p)
-    return ["&"] * (len(partes) - 1) + slots
+// ── MODAL: NUEVA TARIMA (peso opcional) ──────────────────
+function ModalNuevaTarima({ onClose, onConfirmar }) {
+  const [peso, setPeso] = useState('')
+  const [tipo, setTipo] = useState('tarima')
+  const [enviando, setEnviando] = useState(false)
 
-def _or(*partes):
-    slots = []
-    for p in partes:
-        slots += _frag(p)
-    return ["|"] * (len(partes) - 1) + slots
+  const confirmar = async () => {
+    if (enviando) return  // evita doble clic mientras la peticion esta en camino
+    setEnviando(true)
+    try { await onConfirmar(parseFloat(peso) || 0, tipo) }
+    finally { setEnviando(false) }
+  }
 
-async def listar_traspasos_pendientes(destinos: list = None, origenes: list = None):
-    # Compatibilidad: si nadie pasa nada, usa el valor viejo por variable de entorno
-    if destinos is None and origenes is None:
-        destinos = DESTINOS_TRASPASO
-    destinos = destinos or []
-    origenes = origenes or []
-    if not destinos and not origenes:
-        return []
+  return (
+    <Modal titulo="Agrupar mercancia" sub="Se crea vacia; despues le asignas productos" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
+        <button className="btn-principal" onClick={confirmar} disabled={enviando}>
+          {enviando ? 'Creando...' : 'Crear'}
+        </button>
+      </>}>
+      <label className="dim-label">Tipo de bulto</label>
+      <div className="cm-toggle" style={{marginBottom:14}}>
+        <span className={'cm-pill' + (tipo === 'tarima' ? ' on' : '')} onClick={() => !enviando && setTipo('tarima')}>Tarima</span>
+        <span className={'cm-pill' + (tipo === 'caja' ? ' on' : '')} onClick={() => !enviando && setTipo('caja')}>Caja</span>
+      </div>
+      <label className="dim-label">Peso en kg (opcional)</label>
+      <input className="inp" type="number" min="0" step="0.1" placeholder="0"
+        value={peso} onChange={e => setPeso(e.target.value)} disabled={enviando} autoFocus />
+    </Modal>
+  )
+}
 
-    fecha_limite = (datetime.now() - timedelta(days=45)).strftime("%Y-%m-%d")
-    leaf_estado = ["state", "not in", ["done", "cancel"]]
-    leaf_fecha  = ["scheduled_date", ">=", fecha_limite]
+// ── MODAL: ASIGNAR PRODUCTOS A TARIMA (cantidad por SKU) ──
+function ModalAsignar({ tarimasAbiertas, productos, idTarimaPre, onClose, onConfirmar }) {
+  const [idTarima, setIdTarima] = useState(idTarimaPre || (tarimasAbiertas[0]?.id_tarima ?? ''))
+  const [cants, setCants] = useState(() => {
+    const init = {}
+    productos.forEach(p => { init[p.id_producto] = p.cantidad_pendiente })
+    return init
+  })
 
-    rama_destino = _and(["location_dest_id", "child_of", destinos], ["location_id.usage", "in", ["internal", "transit"]])
-    rama_origen  = _and(["location_id", "child_of", origenes], ["location_dest_id.usage", "in", ["internal", "transit"]])
+  const confirmar = () => {
+    const asignaciones = productos
+      .map(p => ({ id_producto: p.id_producto, cantidad: parseInt(cants[p.id_producto]) || 0 }))
+      .filter(a => a.cantidad > 0)
+    if (!idTarima) return
+    if (!asignaciones.length) return
+    onConfirmar(idTarima, asignaciones)
+  }
 
-    if destinos and origenes:
-        dominio = _and(leaf_estado, leaf_fecha, _or(rama_destino, rama_origen))
-    elif destinos:
-        dominio = _and(leaf_estado, leaf_fecha, rama_destino)
-    else:
-        dominio = _and(leaf_estado, leaf_fecha, rama_origen)
+  return (
+    <Modal titulo="Asignar a carga agrupada" sub={`${productos.length} producto(s) seleccionado(s)`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={confirmar}>Confirmar</button>
+      </>}>
+      <label className="dim-label">Carga agrupada destino</label>
+      <select className="inp" style={{marginBottom: 14}} value={idTarima} onChange={e => setIdTarima(e.target.value)}>
+        {tarimasAbiertas.map(t => (
+          <option key={t.id_tarima} value={t.id_tarima}>{t.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'} {t.numero_tarima}</option>
+        ))}
+      </select>
+      <label className="dim-label">Cantidad por producto</label>
+      {productos.map(p => (
+        <div key={p.id_producto} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:11,color:'var(--amarillo)'}}>{p.clave}</div>
+            <div style={{fontSize:12,color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</div>
+            <div style={{fontSize:10,color:'var(--text3)'}}>Disponible: {p.cantidad_pendiente}</div>
+          </div>
+          <input type="number" min="1" max={p.cantidad_pendiente}
+            className="inp" style={{width:70,textAlign:'right',padding:'7px 8px'}}
+            value={cants[p.id_producto]}
+            onChange={e => setCants({ ...cants, [p.id_producto]: e.target.value })} />
+        </div>
+      ))}
+    </Modal>
+  )
+}
 
-    pickings = await _rpc("stock.picking", "search_read",
-        [dominio],
-        {
-            "fields": ["name", "location_id", "location_dest_id", "state", "origin", "move_ids", "scheduled_date"],
-            "order": "id desc", "limit": 400
+// ── MODAL: CERRAR TARIMA (dimensiones opcionales) ────────
+function ModalCerrarTarima({ onClose, onConfirmar }) {
+  const [largo, setLargo] = useState('')
+  const [ancho, setAncho] = useState('')
+  const [alto, setAlto] = useState('')
+  return (
+    <Modal titulo="Cerrar bulto" sub="Dimensiones fisicas opcionales" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar({
+          largo_cm: parseFloat(largo) || 0, ancho_cm: parseFloat(ancho) || 0, alto_cm: parseFloat(alto) || 0
+        })}>Cerrar bulto</button>
+      </>}>
+      <div className="dim-grid">
+        <div><label className="dim-label">Largo (cm)</label>
+          <input className="inp" type="number" min="0" step="0.5" placeholder="0" value={largo} onChange={e => setLargo(e.target.value)} /></div>
+        <div><label className="dim-label">Ancho (cm)</label>
+          <input className="inp" type="number" min="0" step="0.5" placeholder="0" value={ancho} onChange={e => setAncho(e.target.value)} /></div>
+        <div><label className="dim-label">Alto (cm)</label>
+          <input className="inp" type="number" min="0" step="0.5" placeholder="0" value={alto} onChange={e => setAlto(e.target.value)} /></div>
+      </div>
+    </Modal>
+  )
+}
+
+// ── MODAL: EXTENSION DE SKU ────────────────────────────────
+function ModalExtension({ producto, onClose, onConfirmar }) {
+  return (
+    <Modal titulo="Extension de SKU" sub={`Clave: ${producto.clave}`} onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar(producto.cantidad_total)}>
+          Crear extension ({producto.cantidad_total})
+        </button>
+      </>}>
+      <p style={{fontSize:12,color:'var(--text3)',marginBottom:14,lineHeight:1.5}}>
+        Para productos con 2+ empaques fisicos separados. Se creara una extension
+        con la misma cantidad que el SKU original ({producto.cantidad_total}).
+      </p>
+    </Modal>
+  )
+}
+
+// ── SUCURSALES RAIKER ─────────────────────────────────────
+const SUCURSALES_RAIKER = [
+  'ACAYUCAN','APIZACO','ATLIXCO','BOCA','BOTICARIA','BOULEVARD','CANCUN','CARDEL',
+  'CARDENAS','CBA. AVENIDA','CBA. ESQUINA','CD. ISLA','COATZA','COSAMALOAPAN',
+  'DIAZ MIRON','EMILIANO ZAPATA','GUADALAJARA','IZUCAR','LAS CHOAPAS','LOMA BONITA',
+  'MALIBRAN','MARTINEZ','MERIDA CANEK','MERIDA CENTRO','OAXACA','ORIZABA','PACHUCA',
+  'PAPANTLA','PEROTE','PUEBLA','SALINA CRUZ','SAN ANDRES','TECAMACHALCO',
+  'TEHUACAN AVE','TEHUACAN BLVD.','TEJERIA','TENOSIQUE','TEXMELUCAN','TIERRA BLANCA',
+  'TIZAYUCA','TLALNEPANTLA','TUXPAN','TUXTEPEC','VER NORTE','VILLAHERMOSA',
+  'XALAPA','XALAPA 2'
+]
+
+// ── MODAL: SUCURSAL RAIKER ────────────────────────────────
+function ModalSucursal({ actual, onClose, onConfirmar }) {
+  const [valor, setValor] = useState(actual || '')
+  return (
+    <Modal titulo="Sucursal Raiker" sub="Selecciona la sucursal de destino" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" disabled={!valor} onClick={() => onConfirmar(valor)}>Guardar</button>
+      </>}>
+      <select className="inp" value={valor} onChange={e => setValor(e.target.value)} autoFocus>
+        <option value="">-- Selecciona sucursal --</option>
+        {SUCURSALES_RAIKER.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+    </Modal>
+  )
+}
+
+// ── MODAL: CLIENTE Y DIRECCION ────────────────────────────
+function ModalCliente({ nombre, direccion, onClose, onConfirmar }) {
+  const [n, setN] = useState(nombre || '')
+  const [d, setD] = useState(direccion || '')
+  return (
+    <Modal titulo="Cliente y direccion" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" onClick={() => onConfirmar(n, d)}>Guardar</button>
+      </>}>
+      <label className="dim-label">Nombre del cliente</label>
+      <input className="inp" style={{marginBottom:12}} value={n} onChange={e => setN(e.target.value)} autoFocus />
+      <label className="dim-label">Dirección</label>
+      <textarea className="inp" rows={3} style={{resize:'vertical'}} value={d} onChange={e => setD(e.target.value)} />
+    </Modal>
+  )
+}
+
+// ── MODAL: FUSIONAR ENTREGAS ──────────────────────────────
+function ModalFusion({ onClose, onConfirmar }) {
+  const [grupos, setGrupos] = useState(null)
+  const [selEnt, setSelEnt] = useState(new Set())
+  const [clienteActivo, setClienteActivo] = useState(null)
+
+  useEffect(() => {
+    api.candidatasFusion().then(setGrupos).catch(() => setGrupos([]))
+  }, [])
+
+  const toggle = (idEntrega, cliente) => {
+    if (clienteActivo && clienteActivo !== cliente && selEnt.size === 0) setClienteActivo(cliente)
+    if (clienteActivo && clienteActivo !== cliente) return // solo un cliente a la vez
+    const n = new Set(selEnt)
+    if (n.has(idEntrega)) { n.delete(idEntrega); if (n.size === 0) setClienteActivo(null) }
+    else { n.add(idEntrega); setClienteActivo(cliente) }
+    setSelEnt(n)
+  }
+
+  return (
+    <Modal titulo="Fusionar entregas" sub="Selecciona 2+ entregas del mismo cliente" onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose}>Cancelar</button>
+        <button className="btn-principal" disabled={selEnt.size < 2} onClick={() => onConfirmar([...selEnt])}>
+          Agrupar juntas
+        </button>
+      </>}>
+      {!grupos ? <div className="cargando">Cargando...</div>
+        : grupos.length === 0 ? <div className="vacio">No hay clientes con 2+ entregas pendientes.</div>
+        : grupos.map(g => (
+          <div key={g.cliente} className="fusion-grupo">
+            <div className="fusion-cliente">{g.cliente}</div>
+            {g.entregas.map(e => (
+              <label key={e.id_entrega} className="fusion-fila"
+                style={{ opacity: clienteActivo && clienteActivo !== g.cliente ? 0.4 : 1 }}>
+                <input type="checkbox" checked={selEnt.has(e.id_entrega)}
+                  disabled={clienteActivo && clienteActivo !== g.cliente}
+                  onChange={() => toggle(e.id_entrega, g.cliente)} />
+                <span className="ff-folio">{e.num_entrega}</span>
+                <span className="ff-ov">{e.orden ? 'OV ' + e.orden : ''}</span>
+              </label>
+            ))}
+          </div>
+        ))}
+    </Modal>
+  )
+}
+
+// ── DETALLE DE ENTREGA ───────────────────────────────────
+function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const volver = () => navigate('/')
+  const miRol = api.getUser()?.rol
+  const [ent, setEnt] = useState(null)
+  const [sel, setSel] = useState(new Set())
+  const [modalNueva, setModalNueva] = useState(false)
+  const [modalAsignarPre, setModalAsignarPre] = useState(undefined) // undefined=cerrado, null|id_tarima=abierto
+  const [modalCerrar, setModalCerrar] = useState(null)
+  const [modalExt, setModalExt] = useState(null)
+  const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
+  const [modalCambioSistema, setModalCambioSistema] = useState(false)
+  const [modalEliminarEntrega, setModalEliminarEntrega] = useState(false)
+  const [modalEntregaParcial, setModalEntregaParcial] = useState(null) // { excluidos } | null
+  const [modoMaster, setModoMaster] = useState({}) // { clave: true } — true = va en caja master
+  const [modalSucursal, setModalSucursal] = useState(false)
+  const [modalCliente, setModalCliente] = useState(false)
+  const [abiertas, setAbiertas] = useState(new Set())
+
+  const cargar = async () => {
+    try {
+      const d = await api.detalleEntrega(id)
+      const idsFusion = new Set()
+      ;(d.tarimas || []).forEach(t => {
+        if (t.ids_entregas_fusionadas) t.ids_entregas_fusionadas.split(',').forEach(x => idsFusion.add(x))
+      })
+      idsFusion.delete(id)
+
+      if (idsFusion.size > 0) {
+        const f = await api.fusionDetalle([id, ...idsFusion])
+        const folios = f.entregas.map(e => e.num_entrega).filter(Boolean).join(' + ')
+        const ovs    = f.entregas.map(e => e.orden).filter(Boolean).join(' + ')
+        const combinado = {
+          ...d,
+          es_fusion:          true,
+          idsFusionActivos:   [id, ...idsFusion],
+          num_entrega:        folios,
+          orden:              ovs,
+          nombre_cliente:     f.cliente,
+          productos:          f.productos,
+          tarimas:            f.tarimas,
         }
-    )
+        setEnt(combinado)
+        setAbiertas(prev => new Set([...prev, ...(f.tarimas || []).filter(t => t.estatus === 'abierta').map(t => t.id_tarima)]))
+      } else {
+        setEnt(d)
+        setAbiertas(prev => new Set([...prev, ...(d.tarimas || []).filter(t => t.estatus === 'abierta').map(t => t.id_tarima)]))
+      }
+    } catch (e) { toast(e.message, 'error') }
+  }
 
-    # Cuando el traslado es de varios pasos, el "OUT" que encontramos apunta
-    # a una ubicacion de transito generica (ej. "Warehouse Transfer"), no al
-    # almacen destino real. Ese destino real esta en el registro hermano
-    # ".../IN/#####" que comparte la misma referencia ("origin"). Lo buscamos.
-    origenes_ref = list(set(p["origin"] for p in pickings if p.get("origin") and "/OUT/" in p.get("name", "")))
-    destinos_reales = {}
-    if origenes_ref:
-        hermanos = await _rpc("stock.picking", "search_read",
-            [[["origin", "in", origenes_ref], ["name", "like", "/IN/"]]],
-            {"fields": ["origin", "location_dest_id"]}
-        )
-        for h in hermanos:
-            if h.get("origin") and h.get("location_dest_id"):
-                destinos_reales[h["origin"]] = h["location_dest_id"][1]
+  useEffect(() => { cargar(); setSel(new Set()) }, [id])
 
-    return [{
-        "id":         p["id"],
-        "folio":      p["name"],
-        "origen":     p["location_id"][1] if p.get("location_id") else "",
-        "destino":    destinos_reales.get(p.get("origin")) or (
-            f"{p['location_dest_id'][1]} (tentativo, sin confirmar)" if p.get("location_dest_id") else "(sin destino)"
-        ),
-        "estado":     p["state"],
-        "referencia": p.get("origin") or "",
-        "fecha":      (p.get("scheduled_date") or "")[:10],
-        "move_ids":   p["move_ids"]
-    } for p in pickings]
+  if (!ent) return <div className="cargando">Cargando entrega...</div>
 
-async def diag_traspasos(ubicaciones: list = None):
-    """Sin filtro de tipo de operacion ni de estatus — para ver que hay
-    realmente en esas ubicaciones antes de decidir el filtro final."""
-    ubicaciones = ubicaciones if ubicaciones is not None else DESTINOS_TRASPASO
-    if not ubicaciones:
-        return []
-    pickings = await _rpc("stock.picking", "search_read",
-        [[["location_dest_id", "child_of", ubicaciones]]],
-        {
-            "fields": ["name", "location_id", "location_dest_id", "state", "picking_type_id", "origin", "scheduled_date"],
-            "order": "id desc", "limit": 40
-        }
-    )
-    return [{
-        "folio":         p["name"],
-        "origen":        p["location_id"][1] if p.get("location_id") else "",
-        "destino":       p["location_dest_id"][1] if p.get("location_dest_id") else "",
-        "estado":        p["state"],
-        "tipo_operacion":p["picking_type_id"][1] if p.get("picking_type_id") else "",
-        "referencia":    p.get("origin") or "",
-        "fecha":         (p.get("scheduled_date") or "")[:10],
-    } for p in pickings]
+  const productos = ent.productos || []
+  const tarimas    = ent.tarimas || []
+  const abiertasT  = tarimas.filter(t => t.estatus === 'abierta')
+  const pendientes = productos.filter(p => p.cantidad_pendiente > 0)
+  const usaTarimas = ent.sistema === 'TAR' || ent.sistema === 'MIX'
 
-async def buscar_almacenes(nombre: str = ""):
-    """Busca almacenes reales en Odoo para que el admin elija cuales vigilar."""
-    dominio = [["name", "ilike", nombre]] if nombre else []
-    almacenes = await _rpc("stock.warehouse", "search_read",
-        [dominio],
-        {"fields": ["id", "name", "code", "view_location_id", "lot_stock_id"], "limit": 50}
-    )
-    return [{
-        "id":          a["id"],
-        "nombre":      a["name"],
-        "codigo":      a["code"],
-        "location_id": a["view_location_id"][0] if a.get("view_location_id") else None,
-    } for a in almacenes]
+  const toggleSel = (idProd) => {
+    const n = new Set(sel)
+    n.has(idProd) ? n.delete(idProd) : n.add(idProd)
+    setSel(n)
+  }
 
-async def cargar_traspaso(picking_id: int):
-    picks = await _rpc("stock.picking", "search_read",
-        [[["id", "=", picking_id]]],
-        {"fields": ["name", "location_id", "location_dest_id", "move_ids"]}
-    )
-    if not picks:
-        raise Exception("Traspaso no encontrado")
-    p = picks[0]
-    moves = await _rpc("stock.move", "search_read",
-        [[["id", "in", p["move_ids"]]]],
-        {"fields": ["product_id", "product_uom_qty", "name"]}
-    )
-    origen  = p["location_id"][1] if p.get("location_id") else ""
-    destino = p["location_dest_id"][1] if p.get("location_dest_id") else ""
+  const completar = async () => {
+    try { await api.completarEntrega(id); toast('Entrega completada', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
 
-    productos = []
-    for m in moves:
-        if m["product_uom_qty"] <= 0:
-            continue
-        nombre = m["product_id"][1] if m.get("product_id") else m["name"]
-        match = re.match(r"^\[([^\]]+)\]", nombre)
-        clave = match.group(1).strip() if match else nombre.split(" ")[0]
-        desc  = nombre.replace(match.group(0), "").strip() if match else nombre
-        productos.append({
-            "clave": clave, "descripcion": desc,
-            "cantidad_total": round(m["product_uom_qty"]), "unidad": "PZA"
-        })
+  const reabrirEnt = async () => {
+    try { await api.reabrirEntrega(id); toast('Entrega reabierta', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
 
-    folio_limpio = re.sub(r"[^A-Z0-9]+", "-", p["name"].upper()).strip("-")
-    return {
-        "num_entrega":     f"TRASPASO-{folio_limpio}",
-        "orden":           p["name"],
-        "nombre_cliente":  f"TRASPASO A {destino}",
-        "direccion":       f"Origen: {origen}  ->  Destino: {destino}",
-        "sucursal":        destino,
-        "comercializador": "ECOR",
-        "fuente":          "odoo",
-        "productos":       productos
+  const toggleModoMaster = (clave) => setModoMaster(prev => ({ ...prev, [clave]: !prev[clave] }))
+
+  const abrirEtiquetasSueltas = () => {
+    const skus = Object.keys(modoMaster).filter(clave => modoMaster[clave])
+    const pendientes = productos.filter(p => p.cantidad_pendiente > 0)
+    const seleccionados = pendientes.filter(p => sel.has(p.id_producto))
+
+    // Si no marco nada, o marco todo lo pendiente, es una entrega completa normal
+    if (seleccionados.length === 0 || seleccionados.length === pendientes.length) {
+      setSel(new Set())
+      verEtiquetasSueltas(id, skus)
+      return
     }
+    // Selecciono solo una parte — pide motivo antes de continuar
+    const excluidos = pendientes.filter(p => !sel.has(p.id_producto))
+    setModalEntregaParcial({ excluidos, seleccionados, skus })
+  }
+
+  const confirmarEntregaParcial = async (motivo) => {
+    const { seleccionados, skus } = modalEntregaParcial
+    setModalEntregaParcial(null)
+    setSel(new Set())
+    verEtiquetasSueltas(id, skus, seleccionados.map(p => p.id_producto), motivo)
+  }
+
+  const eliminarEntregaCompleta = async (motivo) => {
+    try {
+      await api.eliminarEntrega(id, motivo)
+      toast('Entrega eliminada', 'ok')
+      setModalEliminarEntrega(false)
+      navigate('/')
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const solicitarCambio = async (sistemaNuevo, motivo) => {
+    try {
+      const res = await api.solicitarCambioSistema(id, sistemaNuevo, motivo)
+      toast(res.aplicado ? 'Sistema actualizado' : 'Cambio aplicado', 'ok')
+      setModalCambioSistema(false); cargar()
+    } catch (e) {
+      setModalCambioSistema(false)
+      if (/[Ss]olicitud enviada/.test(e.message)) toast('Solicitud enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e.message, 'error')
+    }
+  }
+
+  const crearTarimaVacia = async (pesoPaletKg, tipoBulto) => {
+    try {
+      await api.crearTarima(id, pesoPaletKg, ent.idsFusionActivos || null, tipoBulto)
+      toast(tipoBulto === 'caja' ? 'Caja creada' : 'Tarima creada', 'ok')
+      setModalNueva(false); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const abrirAsignar = (idTarimaPre) => {
+    if (abiertasT.length === 0) { toast('Crea un bulto abierto primero', 'error'); return }
+    if (sel.size === 0) { toast('Selecciona productos pendientes', 'error'); return }
+    setModalAsignarPre(idTarimaPre ?? null)
+  }
+
+  const confirmarAsignar = async (idTarima, asignaciones) => {
+    try {
+      const res = await api.asignarProductos(id, idTarima, asignaciones)
+      toast(`${res.asignados} asignado(s)`, 'ok')
+      if (res.advertencias) toast(res.advertencias.join(' · '), 'error')
+      setSel(new Set()); setModalAsignarPre(undefined); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const quitarUnDetalle = (idDetalle) => {
+    setModalConfirmar({
+      titulo: 'Quitar producto',
+      mensaje: '¿Quitar este producto del bulto? La cantidad vuelve a pendiente.',
+      accion: async () => {
+        try { await api.quitarDetalle(id, idDetalle); toast('Devuelto', 'ok'); cargar() }
+        catch (e) { toast(e.message, 'error') }
+      }
+    })
+  }
+
+  const eliminarUnaTarima = (idTarima) => {
+    setModalConfirmar({
+      titulo: 'Eliminar bulto',
+      mensaje: '¿Eliminar este bulto? Todas sus cantidades vuelven a pendiente.',
+      peligro: true,
+      accion: async () => {
+        try { await api.eliminarTarima(id, idTarima); toast('Tarima eliminada', 'ok'); cargar() }
+        catch (e) { toast(e.message, 'error') }
+      }
+    })
+  }
+
+  const cerrarConDims = async (dims) => {
+    try {
+      await api.cerrarTarima(id, modalCerrar, dims)
+      toast('Tarima cerrada', 'ok')
+      setModalCerrar(null); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const reabrir = async (idTarima) => {
+    try { await api.reabrirTarima(id, idTarima); toast('Tarima reabierta', 'ok'); cargar() }
+    catch (e) { toast(e.message, 'error') }
+  }
+
+  const crearExtension = async (cantidad) => {
+    try {
+      const res = await api.agregarExtension(id, modalExt.id_producto, cantidad)
+      toast('Extension creada: ' + res.clave, 'ok')
+      setModalExt(null); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const guardarSucursal = async (sucursal) => {
+    try {
+      await api.actualizarEntrega(id, { sucursal })
+      toast('Sucursal actualizada', 'ok')
+      setModalSucursal(false); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const guardarCliente = async (nombre_cliente, direccion) => {
+    try {
+      await api.actualizarEntrega(id, { nombre_cliente, direccion })
+      toast('Cliente actualizado', 'ok')
+      setModalCliente(false); cargar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const toggleAbierta = (idTarima) => {
+    const n = new Set(abiertas)
+    n.has(idTarima) ? n.delete(idTarima) : n.add(idTarima)
+    setAbiertas(n)
+  }
+
+  const productosSeleccionados = productos.filter(p => sel.has(p.id_producto))
+  const esRaiker = (ent.comercializador || '').toLowerCase().includes('raiker')
+
+  return (
+    <div className="contenedor">
+      <div className="detalle-head">
+        <div>
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <span className="detalle-folio">{ent.num_entrega}</span>
+            <span className={'badge-sistema badge-' + ent.sistema}>{ent.sistema}</span>
+            <span className={'badge-estatus badge-' + ent.estatus}>{ent.estatus}</span>
+            {ent.orden && <span className="chip chip-warn">{ent.orden}</span>}
+          </div>
+          <div style={{marginTop:10,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span className="detalle-cliente">{ent.nombre_cliente || 'Sin cliente'}</span>
+            <button className="btn-quitar-mini" onClick={() => setModalCliente(true)}>Editar</button>
+            {esRaiker && (
+              <span className="chip chip-raiker" style={{cursor:'pointer'}} onClick={() => setModalSucursal(true)}>
+                {ent.sucursal ? 'Suc: ' + ent.sucursal : 'Elegir sucursal ✎'}
+              </span>
+            )}
+          </div>
+          {ent.direccion && <div className="detalle-dir" style={{marginTop:2}}>{ent.direccion}</div>}
+        </div>
+        <div className="acciones">
+          <button className="btn-sec" onClick={volver}>Volver</button>
+          {ent.estatus === 'pendiente' &&
+            <button className="btn-principal" onClick={completar}>Completar entrega</button>}
+          <MenuAcciones acciones={[
+            ...(productos.some(p => p.cantidad_pendiente > 0) && (ent.sistema === 'CS' || ent.sistema === 'MIX')
+              ? [{ label: 'Imprimir etiquetas sueltas', onClick: abrirEtiquetasSueltas }] : []),
+            ...(tarimas.some(t => t.estatus === 'cerrada')
+              ? [{ label: 'Ver etiquetas de carga agrupada', onClick: () => verEtiquetas(id) }] : []),
+            ...(tarimas.some(t => t.estatus === 'cerrada') || ent.estatus === 'completada'
+              ? [{ label: 'Lista de empaque', onClick: () => verPacking(id) }] : []),
+            ...(ent.estatus === 'completada'
+              ? [{ label: 'Reabrir entrega', onClick: reabrirEnt }] : []),
+            { label: 'Corregir tipo de entrega', onClick: () => setModalCambioSistema(true) },
+            ...(miRol === 'admin'
+              ? [{ label: 'Eliminar entrega', onClick: () => setModalEliminarEntrega(true), peligro: true }] : []),
+          ]} />
+        </div>
+      </div>
+
+      <div className={usaTarimas ? 'split-cols' : ''}>
+        <div>
+          <div className="panel">
+            <div className="panel-titulo">
+              Productos
+              <span className="chip chip-ok">{productos.length}</span>
+            </div>
+            {productos.length === 0 ? <div className="vacio">Sin productos.</div> : (
+              <>
+                <div style={{display:'grid',gridTemplateColumns:'20px 1fr 2fr 50px 60px 60px 50px',gap:8,padding:'6px 12px',fontSize:10,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em'}}>
+                  <span></span><span>Clave</span><span>Descripción</span><span style={{textAlign:'right'}}>Total</span>
+                  <span style={{textAlign:'right'}}>Asig.</span><span style={{textAlign:'right'}}>Pend.</span><span></span>
+                </div>
+                {[...productos].sort((a, b) => (a.cantidad_pendiente === 0 ? 1 : 0) - (b.cantidad_pendiente === 0 ? 1 : 0)).map(p => {
+                  const done = p.cantidad_pendiente === 0
+                  const esExt = p.id_producto.includes('-EXT')
+                  return (
+                    <div key={p.id_producto}
+                      style={{display:'grid',gridTemplateColumns:'20px 1fr 2fr 50px 60px 60px 50px',gap:8,alignItems:'center',
+                        padding:'8px 12px',borderBottom:'1px solid var(--border)',fontSize:12,opacity:done?0.5:1}}>
+                      <input type="checkbox" disabled={done} checked={sel.has(p.id_producto)} onChange={() => toggleSel(p.id_producto)} />
+                      <span style={{color:'var(--amarillo)',fontWeight:700,fontSize:11}}>{p.clave}</span>
+                      <div>
+                        <div style={{color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.descripcion}</div>
+                        {!done && p.cm_cant > 0 && (
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:3}}>
+                            <div className="cm-toggle">
+                              <span className={'cm-pill' + (modoMaster[p.clave] ? ' on' : '')} onClick={() => toggleModoMaster(p.clave)}>Master</span>
+                              <span className={'cm-pill' + (!modoMaster[p.clave] ? ' on' : '')} onClick={() => toggleModoMaster(p.clave)}>Pieza</span>
+                            </div>
+                            <span style={{fontSize:10,color:'var(--text3)'}}>x{p.cm_cant}/caja</span>
+                          </div>
+                        )}
+                      </div>
+                      <span style={{textAlign:'right',}}>{p.cantidad_total}</span>
+                      <span style={{textAlign:'right',color:'var(--text3)'}}>{p.cantidad_asignada || 0}</span>
+                      <span style={{textAlign:'right',color: done ? 'var(--text3)' : 'var(--amarillo)'}}>{p.cantidad_pendiente}</span>
+                      <span>{!esExt && <button className="btn-quitar-mini" onClick={() => setModalExt(p)}>+Ext</button>}</span>
+                    </div>
+                  )
+                })}
+              </>
+            )}
+            {usaTarimas && sel.size > 0 && (
+              <div style={{marginTop:12,display:'flex',gap:8}}>
+                <button className="btn-principal" onClick={() => abrirAsignar()}>
+                  Asignar {sel.size} producto(s) a carga agrupada
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {usaTarimas && (
+          <div className="panel">
+            <div className="panel-titulo">
+              Carga agrupada<span className="chip chip-ok">{tarimas.length}</span>
+            </div>
+            <button className="btn-mini btn-mini-primario" style={{width:'100%',marginBottom:10}} onClick={() => setModalNueva(true)}>
+              + Nuevo bulto
+            </button>
+            {tarimas.length === 0
+              ? <div className="tarima-vacia">Sin bultos todavia.</div>
+              : [...tarimas].sort((a, b) => (a.estatus === 'cerrada' ? 1 : 0) - (b.estatus === 'cerrada' ? 1 : 0)).map(t => {
+                const abierta = abiertas.has(t.id_tarima)
+                const cerrada = t.estatus === 'cerrada'
+                const detalle = t.productos || []
+                return (
+                  <div key={t.id_tarima} className={'tarima-card' + (cerrada ? ' cerrada' : '')}>
+                    <div className="tarima-head" onClick={() => toggleAbierta(t.id_tarima)}>
+                      <span className="tarima-num">{t.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'} {t.numero_tarima}</span>
+                      <span className="tarima-count">{detalle.length} prod.</span>
+                      <span className={'chip ' + (cerrada ? 'chip-ok' : 'chip-warn')}>{cerrada ? 'cerrada' : 'abierta'}</span>
+                    </div>
+                    {(t.largo_cm > 0 && t.ancho_cm > 0 && t.alto_cm > 0) &&
+                      <div className="tarima-dims-tag">{t.largo_cm}×{t.ancho_cm}×{t.alto_cm} cm</div>}
+                    {abierta && (
+                      <div className="tarima-body">
+                        {detalle.length === 0
+                          ? <div className="tarima-vacia">Sin productos</div>
+                          : detalle.map(d => (
+                            <div key={d.id_detalle} className="tarima-prod-row">
+                              <span className="tp-clave">{d.clave}</span>
+                              <span className="tp-desc">{d.descripcion}</span>
+                              <span className="tp-cant">x{d.cantidad_asignada}</span>
+                              {!cerrada && <button className="btn-quitar-mini" onClick={() => quitarUnDetalle(d.id_detalle)}>Quitar</button>}
+                            </div>
+                          ))}
+                        <div className="tarima-acciones">
+                          {cerrada ? (
+                            <>
+                              <button className="btn-mini" onClick={() => verEtiquetas(id, t.id_tarima)}>Ver etiqueta</button>
+                              <button className="btn-mini" onClick={() => reabrir(t.id_tarima)}>Reabrir</button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="btn-mini" onClick={() => { if (sel.size === 0) { toast('Selecciona productos pendientes arriba', 'error'); return } abrirAsignar(t.id_tarima) }}>+ Productos</button>
+                              <button className="btn-mini btn-mini-exito" onClick={() => setModalCerrar(t.id_tarima)}>Cerrar</button>
+                              <button className="btn-mini" onClick={() => eliminarUnaTarima(t.id_tarima)}>Eliminar</button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+          </div>
+        )}
+      </div>
+
+      {modalNueva && (
+        <ModalNuevaTarima onClose={() => setModalNueva(false)} onConfirmar={crearTarimaVacia} />
+      )}
+      {modalAsignarPre !== undefined && (
+        <ModalAsignar
+          tarimasAbiertas={abiertasT}
+          productos={productosSeleccionados}
+          idTarimaPre={modalAsignarPre}
+          onClose={() => setModalAsignarPre(undefined)}
+          onConfirmar={confirmarAsignar}
+        />
+      )}
+      {modalCerrar && (
+        <ModalCerrarTarima onClose={() => setModalCerrar(null)} onConfirmar={cerrarConDims} />
+      )}
+      {modalExt && (
+        <ModalExtension producto={modalExt} onClose={() => setModalExt(null)} onConfirmar={crearExtension} />
+      )}
+      {modalConfirmar && (
+        <ModalConfirmar titulo={modalConfirmar.titulo} mensaje={modalConfirmar.mensaje}
+          textoConfirmar={modalConfirmar.peligro ? 'Eliminar' : 'Confirmar'} peligro={modalConfirmar.peligro}
+          onClose={() => setModalConfirmar(null)}
+          onConfirmar={async () => { await modalConfirmar.accion(); setModalConfirmar(null) }} />
+      )}
+      {modalCambioSistema && (
+        <ModalCambioSistema sistemaActual={ent.sistema}
+          onClose={() => setModalCambioSistema(false)} onConfirmar={solicitarCambio} />
+      )}
+      {modalEliminarEntrega && (
+        <ModalEliminarEntrega numEntrega={ent.num_entrega}
+          onClose={() => setModalEliminarEntrega(false)} onConfirmar={eliminarEntregaCompleta} />
+      )}
+      {modalEntregaParcial && (
+        <ModalEntregaParcial excluidos={modalEntregaParcial.excluidos}
+          onClose={() => setModalEntregaParcial(null)} onConfirmar={confirmarEntregaParcial} />
+      )}
+      {modalSucursal && (
+        <ModalSucursal actual={ent.sucursal} onClose={() => setModalSucursal(false)} onConfirmar={guardarSucursal} />
+      )}
+      {modalCliente && (
+        <ModalCliente nombre={ent.nombre_cliente} direccion={ent.direccion}
+          onClose={() => setModalCliente(false)} onConfirmar={guardarCliente} />
+      )}
+    </div>
+  )
+}
+
+// ── VISTA DE ETIQUETAS (imprimible) ──────────────────────
+function VistaEtiquetas({ toast }) {
+  const { id: idEntrega, idTarima } = useParams()
+  const navigate = useNavigate()
+  const volver = () => navigate(`/entregas/${idEntrega}`)
+  const [datos, setDatos] = useState(null)
+  const [modalMotivo, setModalMotivo] = useState(null) // { fnMarcar, mensaje } | null
+
+  useEffect(() => {
+    const carga = idTarima
+      ? api.obtenerEtiqueta(idEntrega, idTarima).then(d => [d])
+      : api.obtenerTodasEtiquetas(idEntrega)
+    carga.then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+  }, [idEntrega, idTarima])
+
+  const fnMarcar = (motivo) => idTarima
+    ? api.marcarImpresaTarima(idEntrega, idTarima, motivo)
+    : Promise.all(datos.map(d => api.marcarImpresaTarima(idEntrega, d.id_tarima, motivo)))
+
+  const imprimir = async () => {
+    try { await fnMarcar(null); window.print() }
+    catch (e) {
+      if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
+      else toast(e.message, 'error')
+    }
+  }
+
+  const confirmarMotivo = async (motivo) => {
+    try {
+      await fnMarcar(motivo)
+      setModalMotivo(null)
+      window.print()
+    } catch (e2) {
+      setModalMotivo(null)
+      if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e2.message, 'error')
+    }
+  }
+
+  if (!datos) return <div className="cargando">Generando etiqueta(s)...</div>
+
+  const yaImpresa = datos.some(d => (d.impresa_veces || 0) > 0)
+
+  return (
+    <div>
+      <div className="contenedor" style={{marginBottom: 12}}>
+        <div className="acciones" style={{marginLeft: 0}}>
+          <button className="btn-sec" onClick={volver}>Volver</button>
+          <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
+        </div>
+      </div>
+      <Etiquetas datos={datos} />
+      {modalMotivo && (
+        <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
+          onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
+      )}
+    </div>
+  )
+}
+
+// ── VISTA DE ETIQUETAS SUELTAS (por SKU, carga suelta) ───
+function VistaEtiquetasSueltas({ toast }) {
+  const { id: idEntrega } = useParams()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const skusMaster = (searchParams.get('master') || '').split(',').filter(Boolean)
+  const idsSolo = (searchParams.get('solo') || '').split(',').filter(Boolean)
+  const motivoParcial = searchParams.get('motivo') || ''
+  const volver = () => navigate(`/entregas/${idEntrega}`)
+  const [datos, setDatos] = useState(null)
+  const [modalMotivo, setModalMotivo] = useState(null)
+
+  useEffect(() => {
+    api.obtenerEtiquetasSueltas(idEntrega, skusMaster, idsSolo, motivoParcial).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+  }, [idEntrega])
+
+  if (!datos) return <div className="cargando">Generando etiquetas...</div>
+
+  const yaImpresa = datos.some(d => (d.impresa_veces || 0) > 0)
+
+  const imprimir = async () => {
+    try { await api.marcarImpresaSueltas(idEntrega, null); window.print() }
+    catch (e) {
+      if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
+      else toast(e.message, 'error')
+    }
+  }
+
+  const confirmarMotivo = async (motivo) => {
+    try {
+      await api.marcarImpresaSueltas(idEntrega, motivo)
+      setModalMotivo(null)
+      window.print()
+    } catch (e2) {
+      setModalMotivo(null)
+      if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e2.message, 'error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="contenedor" style={{marginBottom: 12}}>
+        <div className="acciones" style={{marginLeft: 0}}>
+          <button className="btn-sec" onClick={volver}>Volver</button>
+          <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
+        </div>
+      </div>
+      <EtiquetasSueltas datos={datos} />
+      {modalMotivo && (
+        <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
+          onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
+      )}
+    </div>
+  )
+}
+
+// ── VISTA DE LISTA DE EMPAQUE (imprimible) ────────────────
+function VistaPacking({ toast }) {
+  const { id: idEntrega } = useParams()
+  const navigate = useNavigate()
+  const volver = () => navigate(`/entregas/${idEntrega}`)
+  const [datos, setDatos] = useState(null)
+  const [modalMotivo, setModalMotivo] = useState(null)
+
+  useEffect(() => {
+    api.obtenerPacking(idEntrega).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+  }, [idEntrega])
+
+  if (!datos) return <div className="cargando">Generando lista de empaque...</div>
+
+  const yaImpresa = (datos.entrega?.packing_impreso_veces || 0) > 0
+
+  const imprimir = async () => {
+    try { await api.marcarImpresoPacking(idEntrega, null); window.print() }
+    catch (e) {
+      if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
+      else toast(e.message, 'error')
+    }
+  }
+
+  const confirmarMotivo = async (motivo) => {
+    try {
+      await api.marcarImpresoPacking(idEntrega, motivo)
+      setModalMotivo(null)
+      window.print()
+    } catch (e2) {
+      setModalMotivo(null)
+      if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
+      else toast(e2.message, 'error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="contenedor" style={{marginBottom: 12}}>
+        <div className="acciones" style={{marginLeft: 0}}>
+          <button className="btn-sec" onClick={volver}>Volver</button>
+          <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
+        </div>
+      </div>
+      <ListaEmpaque datos={datos} />
+      {modalMotivo && (
+        <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
+          onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
+      )}
+    </div>
+  )
+}
+
+// ── MIGAJA DE CONTEXTO — siempre visible, incluso al imprimir ──
+function Migaja() {
+  const { pathname } = useLocation()
+  const partes = ['Inicio']
+  const seg = pathname.split('/').filter(Boolean) // ej: ['entregas','CS-123','etiquetas']
+
+  if (pathname === '/nueva') partes.push('Nueva entrega')
+  else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Autorizaciones') }
+  else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
+  else if (seg[0] === 'entregas' && seg[1]) {
+    partes.push(seg[1])
+    if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
+    if (seg[2] === 'etiquetas-sueltas') partes.push('Etiquetas sueltas')
+    if (seg[2] === 'packing') partes.push('Lista de empaque')
+  }
+
+  return (
+    <div className="migaja">
+      {partes.map((p, i) => (
+        <span key={i}>{i > 0 && <span className="migaja-sep">›</span>}{p}</span>
+      ))}
+    </div>
+  )
+}
+
+// ── APP ──────────────────────────────────────────────────
+export default function App() {
+  const [logueado, setLogueado] = useState(!!api.getToken())
+  const [modalFusion, setModalFusion] = useState(false)
+  const [pendientesReimpresion, setPendientesReimpresion] = useState(0)
+  const [avisoPendiente, setAvisoPendiente] = useState(null) // { cantidadNueva } | null
+  const prevPendientesRef = useRef(null) // null = todavia no cargamos la primera vez
+  const [toast, Toast] = useToast()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  useEffect(() => {
+    if (!logueado) return
+    const user0 = api.getUser()
+    if (user0?.rol !== 'admin' && user0?.rol !== 'gerente') return
+    const check = () => Promise.all([api.contarPendientes(), api.contarPendientesCambios()])
+      .then(([r1, r2]) => {
+        const total = (r1.pendientes || 0) + (r2.pendientes || 0)
+        // Solo avisar si SUBIO desde la ultima revision — no en la primera
+        // carga de la pagina (para no asustar con lo que ya estaba ahi)
+        if (prevPendientesRef.current !== null && total > prevPendientesRef.current) {
+          setAvisoPendiente({ cantidadNueva: total - prevPendientesRef.current, total })
+        }
+        prevPendientesRef.current = total
+        setPendientesReimpresion(total)
+      })
+      .catch(() => {})
+    check()
+    const intervalo = setInterval(check, 8000)
+    return () => clearInterval(intervalo)
+  }, [logueado])
+
+  // Si ya esta parado en Autorizaciones, no hace falta seguir avisando
+  useEffect(() => {
+    if (location.pathname === '/reimpresiones') setAvisoPendiente(null)
+  }, [location.pathname])
+
+  if (!logueado) return <Login onOk={() => setLogueado(true)} />
+
+  const user = api.getUser()
+  const irDetalle = (id) => navigate(`/entregas/${id}`)
+  const verEtiquetas = (idEnt, idTar = null) =>
+    navigate(idTar ? `/entregas/${idEnt}/etiquetas/${idTar}` : `/entregas/${idEnt}/etiquetas`)
+  const verEtiquetasSueltas = (idEnt, skusMaster = [], idsSolo = [], motivo = '') => {
+    const params = new URLSearchParams()
+    if (skusMaster.length) params.set('master', skusMaster.join(','))
+    if (idsSolo.length) params.set('solo', idsSolo.join(','))
+    if (motivo) params.set('motivo', motivo)
+    const qs = params.toString()
+    navigate(`/entregas/${idEnt}/etiquetas-sueltas` + (qs ? `?${qs}` : ''))
+  }
+  const verPacking = (idEnt) => navigate(`/entregas/${idEnt}/packing`)
+
+  const confirmarFusion = async (idsSeleccionados) => {
+    try {
+      const idPrimaria = idsSeleccionados[0]
+      await api.crearTarima(idPrimaria, 0, idsSeleccionados)
+      toast('Tarima fusionada creada', 'ok')
+      setModalFusion(false)
+      irDetalle(idPrimaria)
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  const enVistaEtiqueta = /\/(etiquetas|etiquetas-sueltas|packing)(\/|$)/.test(location.pathname)
+
+  return (
+    <div className="shell">
+      <Migaja />
+      {!enVistaEtiqueta && (
+        <div className="topbar">
+          <button className="topbar-marca" onClick={() => navigate('/')} title="Ir al inicio">GRUPO<span>CLER</span></button>
+          <nav className="topbar-nav">
+            <button className={'nav-btn' + (location.pathname === '/' ? ' activo' : '')}
+              onClick={() => navigate('/')}>Inicio</button>
+            <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
+              onClick={() => navigate('/nueva')}>Nueva entrega</button>
+            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
+              <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
+                onClick={() => navigate('/reimpresiones')}>
+                Autorizaciones
+                {pendientesReimpresion > 0 && <span className="chip chip-warn" style={{marginLeft:6}}>{pendientesReimpresion}</span>}
+              </button>
+            )}
+            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
+              <button className={'nav-btn' + (location.pathname === '/admin' ? ' activo' : '')}
+                onClick={() => navigate('/admin')}>
+                {user?.rol === 'gerente' ? 'Registrar operador' : 'Administracion'}
+              </button>
+            )}
+          </nav>
+          <div className="topbar-user">
+            <span>{user?.nombre || user?.usuario}</span>
+            <button className="btn-salir" onClick={() => { api.logout(); setLogueado(false) }}>
+              Salir
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="contenido">
+        <Routes>
+          <Route path="/" element={<Dashboard irDetalle={irDetalle} onFusionar={() => setModalFusion(true)} />} />
+          <Route path="/nueva" element={<NuevaEntrega toast={toast} irDetalle={irDetalle} />} />
+          <Route path="/entregas/:id" element={
+            <Detalle toast={toast} verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} verPacking={verPacking} />
+          } />
+          <Route path="/entregas/:id/etiquetas" element={<VistaEtiquetas toast={toast} />} />
+          <Route path="/entregas/:id/etiquetas/:idTarima" element={<VistaEtiquetas toast={toast} />} />
+          <Route path="/entregas/:id/etiquetas-sueltas" element={<VistaEtiquetasSueltas toast={toast} />} />
+          <Route path="/entregas/:id/packing" element={<VistaPacking toast={toast} />} />
+          <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
+          <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
+      {modalFusion && (
+        <ModalFusion onClose={() => setModalFusion(false)} onConfirmar={confirmarFusion} />
+      )}
+      <Toast />
+      <AvisoPendiente aviso={avisoPendiente}
+        onVer={() => { setAvisoPendiente(null); navigate('/reimpresiones') }}
+        onCerrar={() => setAvisoPendiente(null)} />
+    </div>
+  )
+}
