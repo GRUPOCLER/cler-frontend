@@ -33,5 +33,13 @@ export default defineConfig({
       }
     })
   ],
-  server: { port: 5173 }
+  server: { port: 5173 },
+  preview: {
+    host: '0.0.0.0',
+    // Railway sirve el sitio desde este dominio (fuera de localhost) —
+    // sin esto, Vite bloquea la peticion por seguridad (proteccion contra
+    // DNS rebinding). El ".up.railway.app" con punto al inicio cubre
+    // tambien si el subdominio cambia en el futuro.
+    allowedHosts: ['cler-frontend-production.up.railway.app', '.up.railway.app']
+  }
 })
