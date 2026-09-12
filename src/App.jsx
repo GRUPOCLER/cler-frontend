@@ -1623,6 +1623,36 @@ export default function App() {
     return () => clearInterval(intervalo)
   }, [logueado])
 
+  // Avisar (a CUALQUIER usuario) cuando una solicitud que el mismo hizo
+  // se resuelve — "Se autorizo tu reimpresion de..." etc.
+  const vistosResolucionRef = useRef(null) // null = primera carga aun no hecha
+  useEffect(() => {
+    if (!logueado) return
+    const TIPO_LABEL = { TARIMA: 'carga agrupada', SUELTAS: 'carga suelta', PACKING: 'lista de empaque' }
+    const check = () => api.misSolicitudes().then(lista => {
+      const resueltas = lista.filter(s => s.estatus === 'aprobada' || s.estatus === 'rechazada')
+      const idsActuales = new Set(resueltas.map(s => s.categoria + '-' + s.id))
+      if (vistosResolucionRef.current === null) {
+        // primera carga: solo recordar lo que ya estaba resuelto, sin avisar
+        vistosResolucionRef.current = idsActuales
+        return
+      }
+      for (const s of resueltas) {
+        const clave = s.categoria + '-' + s.id
+        if (vistosResolucionRef.current.has(clave)) continue
+        const verbo = s.estatus === 'aprobada' ? 'Se autorizó' : 'Se rechazó'
+        const detalle = s.categoria === 'reimpresion'
+          ? `reimpresión de ${TIPO_LABEL[s.tipo] || s.tipo}`
+          : `cambio a ${s.sistema_nuevo}`
+        toast(`${verbo} tu ${detalle} — ${s.num_entrega}`, s.estatus === 'aprobada' ? 'ok' : 'error')
+      }
+      vistosResolucionRef.current = idsActuales
+    }).catch(() => {})
+    check()
+    const intervalo = setInterval(check, 8000)
+    return () => clearInterval(intervalo)
+  }, [logueado])
+
   // Si ya esta parado en Autorizaciones, no hace falta seguir avisando
   useEffect(() => {
     if (location.pathname === '/reimpresiones') setAvisoPendiente(null)
