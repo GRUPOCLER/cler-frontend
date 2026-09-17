@@ -538,17 +538,28 @@ function NuevaEntrega({ toast, irDetalle }) {
     } catch (e) { toast(e.message, 'error') }
   }
 
+  const intentarSubir = async (archivo, forzar) => {
+    setSubiendo(true)
+    try {
+      const res = await api.subirPDF(archivo, sistema, '', forzar)
+      toast(res.total + ' productos extraidos del PDF', 'ok')
+      irDetalle(res.id_entrega)
+    } catch (e) {
+      if (e.status === 409 && !forzar && confirm(e.message + '\n\n¿Quieres registrarla de todas formas?')) {
+        await intentarSubir(archivo, true)
+        return
+      }
+      toast(e.message, 'error')
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
   const subirArchivo = async (archivo) => {
     if (!archivo || archivo.type !== 'application/pdf') {
       toast('Selecciona un archivo PDF', 'error'); return
     }
-    setSubiendo(true)
-    try {
-      const res = await api.subirPDF(archivo, sistema, '')
-      toast(res.total + ' productos extraidos del PDF', 'ok')
-      irDetalle(res.id_entrega)
-    } catch (e) { toast(e.message, 'error') }
-    finally { setSubiendo(false) }
+    await intentarSubir(archivo, false)
   }
 
   return (
