@@ -494,6 +494,7 @@ function NuevaEntrega({ toast, irDetalle }) {
   const [traspasos, setTraspasos] = useState(null)
   const [mostrarUsadosTraspaso, setMostrarUsadosTraspaso] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
+  const [modalDuplicadoPdf, setModalDuplicadoPdf] = useState(null) // { mensaje, archivo } | null
   const [buscarTexto, setBuscarTexto] = useState('')
   const [resultadosBusqueda, setResultadosBusqueda] = useState(null)
   const fileRef = useRef()
@@ -545,8 +546,8 @@ function NuevaEntrega({ toast, irDetalle }) {
       toast(res.total + ' productos extraidos del PDF', 'ok')
       irDetalle(res.id_entrega)
     } catch (e) {
-      if (e.status === 409 && !forzar && confirm(e.message + '\n\n¿Quieres registrarla de todas formas?')) {
-        await intentarSubir(archivo, true)
+      if (e.status === 409 && !forzar) {
+        setModalDuplicadoPdf({ mensaje: e.message, archivo })
         return
       }
       toast(e.message, 'error')
@@ -560,6 +561,12 @@ function NuevaEntrega({ toast, irDetalle }) {
       toast('Selecciona un archivo PDF', 'error'); return
     }
     await intentarSubir(archivo, false)
+  }
+
+  const confirmarSubidaDuplicada = async () => {
+    const { archivo } = modalDuplicadoPdf
+    setModalDuplicadoPdf(null)
+    await intentarSubir(archivo, true)
   }
 
   return (
@@ -749,6 +756,14 @@ function NuevaEntrega({ toast, irDetalle }) {
         <input ref={fileRef} type="file" accept="application/pdf" hidden
           onChange={e => subirArchivo(e.target.files[0])} />
       </div>
+
+      {modalDuplicadoPdf && (
+        <ModalConfirmar titulo="Folio ya registrado"
+          mensaje={modalDuplicadoPdf.mensaje + ' ¿Quieres registrarla de todas formas?'}
+          textoConfirmar="Registrar de todas formas"
+          onClose={() => setModalDuplicadoPdf(null)}
+          onConfirmar={confirmarSubidaDuplicada} />
+      )}
     </div>
   )
 }
