@@ -178,18 +178,20 @@ export const obtenerEtiqueta = (idEntrega, idTarima) =>
 export const obtenerTodasEtiquetas = (idEntrega) =>
   req(`/api/entregas/${idEntrega}/etiquetas`)
 
-export async function subirPDF(archivo, sistema, comercializador) {
+export async function subirPDF(archivo, sistema, comercializador, forzar = false) {
   const fd = new FormData()
   fd.append('archivo', archivo)
   const headers = {}
   if (_token) headers['Authorization'] = 'Bearer ' + _token
   const res = await fetch(
-    API_URL + '/api/entregas/pdf?sistema=' + sistema + '&comercializador=' + encodeURIComponent(comercializador),
+    API_URL + '/api/entregas/pdf?sistema=' + sistema + '&comercializador=' + encodeURIComponent(comercializador) + '&forzar=' + forzar,
     { method: 'POST', headers, body: fd }
   )
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || 'Error al procesar PDF')
+    const error = new Error(err.detail || 'Error al procesar PDF')
+    error.status = res.status
+    throw error
   }
   return res.json()
 }
