@@ -7,6 +7,7 @@ import ListaEmpaque from './ListaEmpaque.jsx'
 import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 import AlmacenPanel from './AlmacenPanel.jsx'
+import MapaAlmacen from './MapaAlmacen.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -1603,6 +1604,7 @@ function Migaja() {
   else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Autorizaciones') }
   else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
   else if (pathname === '/almacen') { partes.length = 0; partes.push('Almacen') }
+  else if (pathname === '/almacen/mapa') { partes.length = 0; partes.push('Almacen', 'Mapa') }
   else if (seg[0] === 'entregas' && seg[1]) {
     partes.push(seg[1])
     if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
@@ -1763,6 +1765,7 @@ export default function App() {
           <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
           <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
           <Route path="/almacen" element={<AlmacenPanel toast={toast} />} />
+          <Route path="/almacen/mapa" element={<MapaAlmacen toast={toast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
