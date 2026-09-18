@@ -257,3 +257,23 @@ export function formatearFecha(fechaStr, conHora = true) {
     ? `${obtener('year')}-${obtener('month')}-${obtener('day')} ${obtener('hour')}:${obtener('minute')}`
     : `${obtener('year')}-${obtener('month')}-${obtener('day')}`
 }
+
+// ── ALMACEN (mapa de ubicaciones, surtido/inventario) ─────
+export const contarUbicaciones = () => req('/api/almacen/contar')
+
+export const listarUbicaciones = (params = {}) => {
+  const q = new URLSearchParams()
+  if (params.buscar) q.set('buscar', params.buscar)
+  if (params.bodega) q.set('bodega', params.bodega)
+  if (params.zona) q.set('zona', params.zona)
+  if (params.soloLibres) q.set('solo_libres', 'true')
+  if (params.soloOcupadas) q.set('solo_ocupadas', 'true')
+  const qs = q.toString()
+  return req('/api/almacen/ubicaciones' + (qs ? `?${qs}` : ''))
+}
+
+export const buscarProductosOdoo = (buscar) =>
+  req('/api/almacen/productos-odoo?buscar=' + encodeURIComponent(buscar || ''))
+
+export const asignarProductoUbicacion = (codigo, body) =>
+  req(`/api/almacen/ubicaciones/${codigo}/asignar`, { method: 'POST', body: JSON.stringify(body) })
