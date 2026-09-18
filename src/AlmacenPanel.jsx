@@ -106,12 +106,81 @@ function ModalAsignar({ ubicacion, onClose, onGuardado, toast }) {
   )
 }
 
+// ── COLORES POR ZONA (borde) y por estatus (relleno) ──────
+const COLOR_ZONA = { ORO: '#eab308', PLATA: '#94a3b8', BRONCE: '#c2650a' }
+
+// ── MAPA VISUAL DEL CEDIS ──────────────────────────────────
+function MapaVisual({ toast, onEditar }) {
+  const [ubicaciones, setUbicaciones] = useState(null)
+  const [hover, setHover] = useState(null)
+
+  useEffect(() => {
+    api.mapaAlmacen().then(setUbicaciones).catch(e => toast(e.message, 'error'))
+  }, [])
+
+  if (!ubicaciones) return <div className="cargando">Cargando mapa...</div>
+
+  // Escala: las coordenadas reales del layout van aprox de 0 a 920 (x) y 0 a 340 (y)
+  const ESCALA = 1.6
+
+  return (
+    <div>
+      <div style={{display:'flex',gap:16,marginBottom:10,fontSize:12,flexWrap:'wrap'}}>
+        <span style={{display:'flex',alignItems:'center',gap:5}}>
+          <span style={{width:12,height:12,background:'var(--bg3)',border:'1px solid var(--border2)',display:'inline-block'}}></span>
+          Libre
+        </span>
+        <span style={{display:'flex',alignItems:'center',gap:5}}>
+          <span style={{width:12,height:12,background:'var(--amarillo)',display:'inline-block'}}></span>
+          Con producto asignado
+        </span>
+        {Object.entries(COLOR_ZONA).map(([z, c]) => (
+          <span key={z} style={{display:'flex',alignItems:'center',gap:5}}>
+            <span style={{width:12,height:12,border:`2px solid ${c}`,display:'inline-block'}}></span>
+            Zona {z}
+          </span>
+        ))}
+      </div>
+
+      <div style={{overflow:'auto',border:'1px solid var(--border)',borderRadius:8,maxHeight:'70vh',background:'var(--bg3)'}}>
+        <svg width={930 * ESCALA} height={345 * ESCALA} viewBox="0 0 930 345" style={{display:'block'}}>
+          {ubicaciones.map(u => {
+            const ocupada = !!u.producto
+            const colorBorde = COLOR_ZONA[u.zona] || 'var(--border2)'
+            return (
+              <rect
+                key={u.codigo}
+                x={u.x} y={u.y} width={Math.max(u.ancho, 1.5)} height={Math.max(u.alto, 1.5)}
+                fill={ocupada ? 'var(--amarillo)' : 'var(--bg2)'}
+                stroke={colorBorde} strokeWidth={0.4}
+                style={{cursor:'pointer'}}
+                onMouseEnter={() => setHover(u)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => onEditar(u)}
+              >
+                <title>{u.codigo} — {u.producto ? `${u.producto} (${u.stock})` : 'Libre'}</title>
+              </rect>
+            )
+          })}
+        </svg>
+      </div>
+
+      {hover && (
+        <div style={{marginTop:8,fontSize:12,color:'var(--text2)'}}>
+          <b>{hover.codigo}</b> · {hover.bodega} · {hover.producto ? `${hover.producto} — ${hover.producto_desc} (existencia: ${hover.stock})` : 'Libre'}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── PANEL PRINCIPAL ────────────────────────────────────────
 export default function AlmacenPanel({ toast }) {
   const [conteo, setConteo] = useState(null)
   const [ubicaciones, setUbicaciones] = useState(null)
   const [buscar, setBuscar] = useState('')
-  const [filtro, setFiltro] = useState('todas') // todas | libres | ocupadas
+  const [filtro, setFiltro] = useState('todas') // todas | libres | ocupadas | con_stock
+  const [vista, setVista] = useState('lista') // lista | mapa
   const [modalUbicacion, setModalUbicacion] = useState(null)
   const debounceRef = useRef()
 
@@ -121,17 +190,19 @@ export default function AlmacenPanel({ toast }) {
     api.listarUbicaciones({
       buscar,
       soloLibres: filtro === 'libres',
-      soloOcupadas: filtro === 'ocupadas'
+      soloOcupadas: filtro === 'ocupadas',
+      soloConStock: filtro === 'con_stock'
     }).then(setUbicaciones).catch(e => toast(e.message, 'error'))
   }
 
   useEffect(() => { cargarConteo() }, [])
 
   useEffect(() => {
+    if (vista !== 'lista') return
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(cargarUbicaciones, 300)
     return () => clearTimeout(debounceRef.current)
-  }, [buscar, filtro])
+  }, [buscar, filtro, vista])
 
   const cerrarModalYRecargar = () => {
     setModalUbicacion(null)
@@ -160,16 +231,29 @@ export default function AlmacenPanel({ toast }) {
       </div>
 
       <div className="panel">
-        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-          <input className="inp" type="text" placeholder="Buscar por codigo, producto o bodega..."
-            value={buscar} onChange={e => setBuscar(e.target.value)} style={{flex:1,minWidth:220}} />
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
           <div className="cm-toggle">
-            <span className={'cm-pill' + (filtro === 'todas' ? ' on' : '')} onClick={() => setFiltro('todas')}>Todas</span>
-            <span className={'cm-pill' + (filtro === 'libres' ? ' on' : '')} onClick={() => setFiltro('libres')}>Libres</span>
-            <span className={'cm-pill' + (filtro === 'ocupadas' ? ' on' : '')} onClick={() => setFiltro('ocupadas')}>Ocupadas</span>
+            <span className={'cm-pill' + (vista === 'lista' ? ' on' : '')} onClick={() => setVista('lista')}>Lista</span>
+            <span className={'cm-pill' + (vista === 'mapa' ? ' on' : '')} onClick={() => setVista('mapa')}>Mapa</span>
           </div>
+          {vista === 'lista' && (
+            <>
+              <input className="inp" type="text" placeholder="Buscar por codigo, producto o bodega..."
+                value={buscar} onChange={e => setBuscar(e.target.value)} style={{flex:1,minWidth:220}} />
+              <div className="cm-toggle">
+                <span className={'cm-pill' + (filtro === 'todas' ? ' on' : '')} onClick={() => setFiltro('todas')}>Todas</span>
+                <span className={'cm-pill' + (filtro === 'libres' ? ' on' : '')} onClick={() => setFiltro('libres')}>Libres</span>
+                <span className={'cm-pill' + (filtro === 'ocupadas' ? ' on' : '')} onClick={() => setFiltro('ocupadas')}>Ocupadas</span>
+                <span className={'cm-pill' + (filtro === 'con_stock' ? ' on' : '')} onClick={() => setFiltro('con_stock')}>Con existencia</span>
+              </div>
+            </>
+          )}
         </div>
 
+        {vista === 'mapa' ? (
+          <MapaVisual toast={toast} onEditar={setModalUbicacion} />
+        ) : (
+        <>
         {!ubicaciones ? <div className="cargando">Cargando...</div>
           : ubicaciones.length === 0 ? <div className="vacio">Sin resultados.</div> : (
           <table className="tabla">
@@ -197,6 +281,8 @@ export default function AlmacenPanel({ toast }) {
         )}
         {ubicaciones && ubicaciones.length === 200 && (
           <div style={{fontSize:12,color:'var(--text3)',marginTop:10}}>Mostrando los primeros 200 — afina la busqueda para ver mas resultados especificos.</div>
+        )}
+        </>
         )}
       </div>
 
