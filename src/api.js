@@ -268,9 +268,12 @@ export const listarUbicaciones = (params = {}) => {
   if (params.zona) q.set('zona', params.zona)
   if (params.soloLibres) q.set('solo_libres', 'true')
   if (params.soloOcupadas) q.set('solo_ocupadas', 'true')
+  if (params.soloConStock) q.set('solo_con_stock', 'true')
   const qs = q.toString()
   return req('/api/almacen/ubicaciones' + (qs ? `?${qs}` : ''))
 }
+
+export const mapaAlmacen = () => req('/api/almacen/mapa')
 
 export const buscarProductosOdoo = (buscar) =>
   req('/api/almacen/productos-odoo?buscar=' + encodeURIComponent(buscar || ''))
