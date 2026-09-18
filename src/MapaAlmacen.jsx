@@ -20,7 +20,7 @@ export default function MapaAlmacen({ toast }) {
   const [ubicaciones, setUbicaciones] = useState(null)
   const [hover, setHover] = useState(null)
   const [modalUbicacion, setModalUbicacion] = useState(null)
-  const [escala, setEscala] = useState(2.6)
+  const [escala, setEscala] = useState(3.4)
 
   const cargar = () => api.mapaAlmacen().then(setUbicaciones).catch(e => toast(e.message, 'error'))
   useEffect(() => { cargar() }, [])
@@ -38,7 +38,7 @@ export default function MapaAlmacen({ toast }) {
         <div style={{flex:1}}></div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button className="btn-mini" onClick={() => setEscala(e => Math.max(1, e - 0.4))}>−</button>
-          <span style={{fontSize:12,color:'var(--text3)',minWidth:36,textAlign:'center'}}>{Math.round(escala * 100 / 2.6)}%</span>
+          <span style={{fontSize:12,color:'var(--text3)',minWidth:36,textAlign:'center'}}>{Math.round(escala * 100 / 3.4)}%</span>
           <button className="btn-mini" onClick={() => setEscala(e => Math.min(6, e + 0.4))}>+</button>
         </div>
       </div>
@@ -49,7 +49,7 @@ export default function MapaAlmacen({ toast }) {
           Libre
         </span>
         <span style={{display:'flex',alignItems:'center',gap:5}}>
-          <span style={{width:14,height:14,background:'var(--amarillo)',borderRadius:3,display:'inline-block'}}></span>
+          <span style={{width:14,height:14,background:'#2f8fd9',borderRadius:3,display:'inline-block'}}></span>
           Con producto asignado
         </span>
         {Object.entries(COLOR_ZONA).map(([z, c]) => (
@@ -78,15 +78,20 @@ export default function MapaAlmacen({ toast }) {
               const ocupada = !!u.producto
               const colorBorde = COLOR_ZONA[u.zona] || 'var(--border2)'
               const esHover = hover?.codigo === u.codigo
+              // Pequeno margen interno para que las casillas no queden pegadas
+              // borde con borde — se ve mucho menos amontonado
+              const margen = 0.35
+              const ancho = Math.max(u.ancho - margen * 2, 1)
+              const alto = Math.max(u.alto - margen * 2, 1)
               return (
                 <rect
                   key={u.codigo}
-                  x={u.x} y={u.y} width={Math.max(u.ancho, 1.5)} height={Math.max(u.alto, 1.5)}
-                  rx="0.5"
-                  fill={ocupada ? 'var(--amarillo)' : 'var(--bg2)'}
-                  stroke={esHover ? 'var(--text)' : colorBorde}
-                  strokeWidth={esHover ? 1 : 0.4}
-                  style={{cursor:'pointer'}}
+                  x={u.x + margen} y={u.y + margen} width={ancho} height={alto}
+                  rx="0.6"
+                  fill={ocupada ? '#2f8fd9' : 'var(--bg2)'}
+                  stroke={esHover ? '#fff' : colorBorde}
+                  strokeWidth={esHover ? 1.1 : 0.35}
+                  style={{cursor:'pointer', transition:'fill .1s'}}
                   onMouseEnter={() => setHover(u)}
                   onMouseLeave={() => setHover(null)}
                   onClick={() => setModalUbicacion(u)}
