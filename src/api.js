@@ -82,6 +82,8 @@ export const cerrarTarima = (idEntrega, idTarima, dims = {}) =>
 
 export const reabrirTarima = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/reabrir`, { method: 'POST' })
+export const solicitarReaperturaTarima = (idEntrega, idTarima, motivo) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/solicitar-reapertura`, { method: 'POST', body: JSON.stringify({ motivo }) })
 
 export const actualizarDimensiones = (idEntrega, idTarima, dims) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/dimensiones`, {
@@ -256,4 +258,50 @@ export function formatearFecha(fechaStr, conHora = true) {
   return conHora
     ? `${obtener('year')}-${obtener('month')}-${obtener('day')} ${obtener('hour')}:${obtener('minute')}`
     : `${obtener('year')}-${obtener('month')}-${obtener('day')}`
+}
+
+// ── ALMACEN (mapa de ubicaciones, surtido/inventario) ─────
+export const contarUbicaciones = () => req('/api/almacen/contar')
+
+export const listarUbicaciones = (params = {}) => {
+  const q = new URLSearchParams()
+  if (params.buscar) q.set('buscar', params.buscar)
+  if (params.bodega) q.set('bodega', params.bodega)
+  if (params.zona) q.set('zona', params.zona)
+  if (params.soloLibres) q.set('solo_libres', 'true')
+  if (params.soloOcupadas) q.set('solo_ocupadas', 'true')
+  if (params.soloConStock) q.set('solo_con_stock', 'true')
+  const qs = q.toString()
+  return req('/api/almacen/ubicaciones' + (qs ? `?${qs}` : ''))
+}
+
+export const mapaAlmacen = () => req('/api/almacen/mapa')
+
+export const buscarProductosOdoo = (buscar) =>
+  req('/api/almacen/productos-odoo?buscar=' + encodeURIComponent(buscar || ''))
+
+export const asignarProductoUbicacion = (codigo, body) =>
+  req(`/api/almacen/ubicaciones/${codigo}/asignar`, { method: 'POST', body: JSON.stringify(body) })
+
+export async function exportarUbicacionesCSV(params = {}) {
+  const q = new URLSearchParams()
+  if (params.bodega) q.set('bodega', params.bodega)
+  if (params.zona) q.set('zona', params.zona)
+  const qs = q.toString()
+  const headers = {}
+  if (_token) headers['Authorization'] = 'Bearer ' + _token
+  const res = await fetch(API_URL + '/api/almacen/exportar-csv' + (qs ? `?${qs}` : ''), { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Error al exportar CSV')
+  }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'ubicaciones_almacen.csv'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
 }
