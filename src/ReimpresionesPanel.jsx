@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import * as api from './api.js'
 import { Modal } from './App.jsx'
 
-const TIPO_LABEL = { TARIMA: 'Carga agrupada', SUELTAS: 'Carga suelta', PACKING: 'Lista de empaque' }
+const TIPO_LABEL = { TARIMA: 'Carga agrupada', SUELTAS: 'Carga suelta', PACKING: 'Lista de empaque', REAPERTURA: 'Reapertura de tarima/caja' }
 
 function ModalResolver({ solicitud, accion, onClose, onConfirmar }) {
   const [comentario, setComentario] = useState('')
