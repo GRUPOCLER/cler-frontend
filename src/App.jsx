@@ -6,6 +6,8 @@ import EtiquetasSueltas from './EtiquetasSueltas.jsx'
 import ListaEmpaque from './ListaEmpaque.jsx'
 import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
+import AlmacenPanel from './AlmacenPanel.jsx'
+import MapaAlmacen from './MapaAlmacen.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -189,7 +191,7 @@ function ModalCambioSistema({ sistemaActual, onClose, onConfirmar }) {
   )
 }
 
-function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
+function ModalMotivoImpresion({ titulo = 'Justificar reimpresion', labelMotivo = 'Motivo de la reimpresion', mensaje, onClose, onConfirmar }) {
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
   const confirmar = async () => {
@@ -202,13 +204,13 @@ function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <div className="modal-titulo">Justificar reimpresion</div>
+            <div className="modal-titulo">{titulo}</div>
             <div className="modal-sub">{mensaje}</div>
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <label className="dim-label">Motivo de la reimpresion</label>
+          <label className="dim-label">{labelMotivo}</label>
           <textarea className="inp" rows={3} style={{resize:'vertical'}} value={motivo}
             onChange={e => setMotivo(e.target.value)} autoFocus />
         </div>
@@ -1185,9 +1187,15 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const reabrir = async (idTarima) => {
-    try { await api.reabrirTarima(id, idTarima); toast('Tarima reabierta', 'ok'); cargar() }
-    catch (e) { toast(e.message, 'error') }
+  const [modalReapertura, setModalReapertura] = useState(null) // { idTarima } | null
+  const abrirReapertura = (idTarima) => setModalReapertura({ idTarima })
+  const confirmarReapertura = async (motivo) => {
+    if (!motivo || motivo.length < 5) { toast('Escribe al menos 5 caracteres de motivo', 'error'); return }
+    try {
+      const res = await api.solicitarReaperturaTarima(id, modalReapertura.idTarima, motivo)
+      toast(res.abierta_directo ? 'Tarima reabierta' : 'Solicitud enviada — queda pendiente de autorizacion', 'ok')
+      setModalReapertura(null); cargar()
+    } catch (e) { toast(e.message, 'error') }
   }
 
   const crearExtension = async (cantidad) => {
@@ -1356,7 +1364,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
                           {cerrada ? (
                             <>
                               <button className="btn-mini" onClick={() => verEtiquetas(id, t.id_tarima)}>Ver etiqueta</button>
-                              <button className="btn-mini" onClick={() => reabrir(t.id_tarima)}>Reabrir</button>
+                              <button className="btn-mini" onClick={() => abrirReapertura(t.id_tarima)}>Reabrir</button>
                             </>
                           ) : (
                             <>
@@ -1406,6 +1414,11 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
       {modalEliminarEntrega && (
         <ModalEliminarEntrega numEntrega={ent.num_entrega}
           onClose={() => setModalEliminarEntrega(false)} onConfirmar={eliminarEntregaCompleta} />
+      )}
+      {modalReapertura && (
+        <ModalMotivoImpresion titulo="Solicitar reapertura" labelMotivo="Motivo de la reapertura"
+          mensaje="Indica por que se necesita reabrir esta tarima/caja ya cerrada."
+          onClose={() => setModalReapertura(null)} onConfirmar={confirmarReapertura} />
       )}
       {modalEntregaParcial && (
         <ModalEntregaParcial excluidos={modalEntregaParcial.excluidos}
@@ -1601,6 +1614,8 @@ function Migaja() {
   if (pathname === '/nueva') partes.push('Nueva entrega')
   else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Autorizaciones') }
   else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
+  else if (pathname === '/almacen') { partes.length = 0; partes.push('Almacen') }
+  else if (pathname === '/almacen/mapa') { partes.length = 0; partes.push('Almacen', 'Mapa') }
   else if (seg[0] === 'entregas' && seg[1]) {
     partes.push(seg[1])
     if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
@@ -1667,9 +1682,11 @@ export default function App() {
         const clave = s.categoria + '-' + s.id
         if (vistosResolucionRef.current.has(clave)) continue
         const verbo = s.estatus === 'aprobada' ? 'Se autorizó' : 'Se rechazó'
-        const detalle = s.categoria === 'reimpresion'
-          ? `reimpresión de ${TIPO_LABEL[s.tipo] || s.tipo}`
-          : `cambio a ${s.sistema_nuevo}`
+        const detalle = s.categoria !== 'reimpresion'
+          ? `cambio a ${s.sistema_nuevo}`
+          : s.tipo === 'REAPERTURA'
+          ? `reapertura de tarima/caja`
+          : `reimpresión de ${TIPO_LABEL[s.tipo] || s.tipo}`
         toast(`${verbo} tu ${detalle} — ${s.num_entrega}`, s.estatus === 'aprobada' ? 'ok' : 'error')
       }
       vistosResolucionRef.current = idsActuales
@@ -1723,6 +1740,8 @@ export default function App() {
               onClick={() => navigate('/')}>Inicio</button>
             <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
               onClick={() => navigate('/nueva')}>Nueva entrega</button>
+            <button className={'nav-btn' + (location.pathname === '/almacen' ? ' activo' : '')}
+              onClick={() => navigate('/almacen')}>Almacen</button>
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
               <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
                 onClick={() => navigate('/reimpresiones')}>
@@ -1758,6 +1777,8 @@ export default function App() {
           <Route path="/entregas/:id/packing" element={<VistaPacking toast={toast} />} />
           <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
           <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
+          <Route path="/almacen" element={<AlmacenPanel toast={toast} />} />
+          <Route path="/almacen/mapa" element={<MapaAlmacen toast={toast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
