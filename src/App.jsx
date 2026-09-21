@@ -6,8 +6,6 @@ import EtiquetasSueltas from './EtiquetasSueltas.jsx'
 import ListaEmpaque from './ListaEmpaque.jsx'
 import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
-import AlmacenPanel from './AlmacenPanel.jsx'
-import MapaAlmacen from './MapaAlmacen.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -1614,8 +1612,6 @@ function Migaja() {
   if (pathname === '/nueva') partes.push('Nueva entrega')
   else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Autorizaciones') }
   else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
-  else if (pathname === '/almacen') { partes.length = 0; partes.push('Almacen') }
-  else if (pathname === '/almacen/mapa') { partes.length = 0; partes.push('Almacen', 'Mapa') }
   else if (seg[0] === 'entregas' && seg[1]) {
     partes.push(seg[1])
     if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
@@ -1740,8 +1736,6 @@ export default function App() {
               onClick={() => navigate('/')}>Inicio</button>
             <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
               onClick={() => navigate('/nueva')}>Nueva entrega</button>
-            <button className={'nav-btn' + (location.pathname === '/almacen' ? ' activo' : '')}
-              onClick={() => navigate('/almacen')}>Almacen</button>
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
               <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
                 onClick={() => navigate('/reimpresiones')}>
@@ -1777,8 +1771,6 @@ export default function App() {
           <Route path="/entregas/:id/packing" element={<VistaPacking toast={toast} />} />
           <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
           <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
-          <Route path="/almacen" element={<AlmacenPanel toast={toast} />} />
-          <Route path="/almacen/mapa" element={<MapaAlmacen toast={toast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
