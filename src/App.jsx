@@ -1021,6 +1021,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
   const [modalCambioSistema, setModalCambioSistema] = useState(false)
   const [modalEliminarEntrega, setModalEliminarEntrega] = useState(false)
+  const [modalReapertura, setModalReapertura] = useState(null) // { idTarima } | null
   const [modalEntregaParcial, setModalEntregaParcial] = useState(null) // { excluidos } | null
   const [modoMaster, setModoMaster] = useState({}) // { clave: true } — true = va en caja master
   const [modalSucursal, setModalSucursal] = useState(false)
@@ -1185,7 +1186,6 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const [modalReapertura, setModalReapertura] = useState(null) // { idTarima } | null
   const abrirReapertura = (idTarima) => setModalReapertura({ idTarima })
   const confirmarReapertura = async (motivo) => {
     if (!motivo || motivo.length < 5) { toast('Escribe al menos 5 caracteres de motivo', 'error'); return }
