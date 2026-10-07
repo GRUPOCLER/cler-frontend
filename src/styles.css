@@ -614,3 +614,14 @@ input,select{font-family:var(--sans);}
   .et-pagina:last-child{page-break-after:auto;}
   .topbar,.contenido>.contenedor>.acciones,.btn-sec,.btn-principal{display:none!important;}
 }
+
+/* Formato grande: 3 etiquetas chicas por hoja de 10x14cm */
+.et-suelta-hoja{width:10cm;height:14cm;background:#fff;display:flex;flex-direction:column;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,.3);}
+.et-suelta-slot{width:10cm;height:calc(14cm / 3);position:relative;overflow:hidden;border-bottom:1px dashed #bbb;box-sizing:border-box;}
+.et-suelta-slot:last-child{border-bottom:none;}
+.et-suelta-escala{position:absolute;top:0;left:calc((10cm - 4in * .918) / 2);transform:scale(.918);transform-origin:top left;}
+.et-suelta-escala .et-suelta-pagina{box-shadow:none;}
+@media print{
+  .et-suelta-hoja{box-shadow:none;page-break-after:always;}
+  .et-suelta-hoja:last-child{page-break-after:auto;}
+}
