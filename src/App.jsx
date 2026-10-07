@@ -1504,6 +1504,13 @@ function VistaEtiquetasSueltas({ toast }) {
   const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null)
+  const [formato, setFormatoEt] = useState(() => {
+    try { return localStorage.getItem('cler_formato_sueltas') === 'grande' ? 'grande' : 'chica' } catch { return 'chica' }
+  })
+  const cambiarFormato = (f) => {
+    setFormatoEt(f)
+    try { localStorage.setItem('cler_formato_sueltas', f) } catch {}
+  }
 
   useEffect(() => {
     api.obtenerEtiquetasSueltas(idEntrega, skusMaster, idsSolo, motivoParcial).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
@@ -1539,9 +1546,13 @@ function VistaEtiquetasSueltas({ toast }) {
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
           <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
+          <select value={formato} onChange={e => cambiarFormato(e.target.value)} style={{marginLeft:8}}>
+            <option value="chica">Etiqueta fisica: chica (4x2")</option>
+            <option value="grande">Etiqueta fisica: grande (3 por hoja)</option>
+          </select>
         </div>
       </div>
-      <EtiquetasSueltas datos={datos} />
+      <EtiquetasSueltas datos={datos} formato={formato} />
       {modalMotivo && (
         <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
           onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
