@@ -55,6 +55,7 @@ function PaginaEtiquetaSuelta({ d }) {
 
 export default function EtiquetasSueltas({ datos, formato = 'chica' }) {
   const grande = formato === 'grande'
+  // chica: 4x2in, una por pagina. grande: hoja 10x14cm con 3 etiquetas apiladas.
   usarTamanoPagina(grande ? '@page { size: 10cm 14cm; margin: 0; }' : '@page { size: 4in 2in; margin: 0; }')
   if (!grande) {
     return (
