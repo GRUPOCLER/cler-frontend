@@ -53,11 +53,29 @@ function PaginaEtiquetaSuelta({ d }) {
   )
 }
 
-export default function EtiquetasSueltas({ datos }) {
-  usarTamanoPagina('@page { size: 4in 2in; margin: 0; }')
+export default function EtiquetasSueltas({ datos, formato = 'chica' }) {
+  const grande = formato === 'grande'
+  usarTamanoPagina(grande ? '@page { size: 10cm 14cm; margin: 0; }' : '@page { size: 4in 2in; margin: 0; }')
+  if (!grande) {
+    return (
+      <div className="et-suelta-wrap">
+        {datos.map(d => <PaginaEtiquetaSuelta key={d.id_producto} d={d} />)}
+      </div>
+    )
+  }
+  const hojas = []
+  for (let i = 0; i < datos.length; i += 3) hojas.push(datos.slice(i, i + 3))
   return (
     <div className="et-suelta-wrap">
-      {datos.map(d => <PaginaEtiquetaSuelta key={d.id_producto} d={d} />)}
+      {hojas.map((grupo, i) => (
+        <div className="et-suelta-hoja" key={i}>
+          {grupo.map(d => (
+            <div className="et-suelta-slot" key={d.id_producto}>
+              <div className="et-suelta-escala"><PaginaEtiquetaSuelta d={d} /></div>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
