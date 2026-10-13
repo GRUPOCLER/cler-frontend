@@ -115,6 +115,10 @@ export const fusionDetalle = (idsEntregas) =>
 export const obtenerPacking = (idEntrega) => req(`/api/entregas/${idEntrega}/packing`)
 
 // ── CONTROL DE IMPRESION Y REAPERTURA ────────────────────
+export const marcarImpresaLote = (idEntrega, idsTarimas, motivo = null) =>
+  req(`/api/entregas/${idEntrega}/tarimas/marcar-impresa-lote`, {
+    method: 'POST', body: JSON.stringify({ ids_tarimas: idsTarimas, motivo })
+  })
 export const marcarImpresaTarima = (idEntrega, idTarima, motivo = null) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/marcar-impresa`, {
     method: 'POST', body: JSON.stringify({ motivo })
@@ -204,6 +208,7 @@ export async function odooSesion() {
 }
 
 export const odooListarOVs = () => req('/api/odoo/ovs')
+export const odooBuscarOVs = (q) => req('/api/odoo/ovs/buscar?q=' + encodeURIComponent(q))
 
 export const odooCargarEntrega = (pickingIds) =>
   req('/api/odoo/entrega', { method: 'POST', body: JSON.stringify(pickingIds) })
