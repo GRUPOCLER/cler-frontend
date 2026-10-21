@@ -273,6 +273,7 @@ export const listarUbicaciones = (params = {}) => {
   if (params.buscar) q.set('buscar', params.buscar)
   if (params.bodega) q.set('bodega', params.bodega)
   if (params.zona) q.set('zona', params.zona)
+  if (params.producto) q.set('producto', params.producto)
   if (params.soloLibres) q.set('solo_libres', 'true')
   if (params.soloOcupadas) q.set('solo_ocupadas', 'true')
   if (params.soloConStock) q.set('solo_con_stock', 'true')
@@ -282,16 +283,18 @@ export const listarUbicaciones = (params = {}) => {
 
 export const mapaAlmacen = () => req('/api/almacen/mapa')
 
-export const buscarProductosOdoo = (buscar) =>
-  req('/api/almacen/productos-odoo?buscar=' + encodeURIComponent(buscar || ''))
+export const buscarProductoAlmacen = (q) =>
+  req('/api/almacen/producto?q=' + encodeURIComponent(q || ''))
 
-export const asignarProductoUbicacion = (codigo, body) =>
-  req(`/api/almacen/ubicaciones/${codigo}/asignar`, { method: 'POST', body: JSON.stringify(body) })
+export const sincronizarAlmacen = () => req('/api/almacen/sincronizar', { method: 'POST' })
+
+export const estadoSyncAlmacen = () => req('/api/almacen/estado-sync')
 
 export async function exportarUbicacionesCSV(params = {}) {
   const q = new URLSearchParams()
   if (params.bodega) q.set('bodega', params.bodega)
   if (params.zona) q.set('zona', params.zona)
+  if (params.producto) q.set('producto', params.producto)
   const qs = q.toString()
   const headers = {}
   if (_token) headers['Authorization'] = 'Bearer ' + _token
@@ -304,7 +307,7 @@ export async function exportarUbicacionesCSV(params = {}) {
   const url = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'ubicaciones_almacen.csv'
+  a.download = 'existencias_almacen.csv'
   document.body.appendChild(a)
   a.click()
   a.remove()
