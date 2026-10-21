@@ -8,6 +8,9 @@ import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 import AlmacenPanel from './AlmacenPanel.jsx'
 import MapaAlmacen from './MapaAlmacen.jsx'
+import ConteoPanel from './ConteoPanel.jsx'
+import ConteoCaptura from './ConteoCaptura.jsx'
+import ConteoReporte from './ConteoReporte.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -191,7 +194,7 @@ function ModalCambioSistema({ sistemaActual, onClose, onConfirmar }) {
   )
 }
 
-function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
+function ModalMotivoImpresion({ titulo = 'Justificar reimpresion', labelMotivo = 'Motivo de la reimpresion', mensaje, onClose, onConfirmar }) {
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
   const confirmar = async () => {
@@ -204,13 +207,13 @@ function ModalMotivoImpresion({ mensaje, onClose, onConfirmar }) {
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <div className="modal-titulo">Justificar reimpresion</div>
+            <div className="modal-titulo">{titulo}</div>
             <div className="modal-sub">{mensaje}</div>
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <label className="dim-label">Motivo de la reimpresion</label>
+          <label className="dim-label">{labelMotivo}</label>
           <textarea className="inp" rows={3} style={{resize:'vertical'}} value={motivo}
             onChange={e => setMotivo(e.target.value)} autoFocus />
         </div>
@@ -499,6 +502,8 @@ function NuevaEntrega({ toast, irDetalle }) {
   const [modalDuplicadoPdf, setModalDuplicadoPdf] = useState(null) // { mensaje, archivo } | null
   const [buscarTexto, setBuscarTexto] = useState('')
   const [resultadosBusqueda, setResultadosBusqueda] = useState(null)
+  const [ovsBusqueda, setOvsBusqueda] = useState([])      // OVs encontradas buscando directo en Odoo
+  const [buscandoOV, setBuscandoOV] = useState(false)
   const fileRef = useRef()
 
   useEffect(() => {
@@ -508,6 +513,22 @@ function NuevaEntrega({ toast, irDetalle }) {
     }, 400)
     return () => clearTimeout(t)
   }, [buscarTexto])
+
+  // Busqueda directa en Odoo: encuentra OVs que la lista general no trae
+  // (mas viejas de 45 dias o fuera del tope de resultados)
+  useEffect(() => {
+    const termino = buscarTexto.trim()
+    if (modoOdoo !== 'ovs' || termino.length < 3) { setOvsBusqueda([]); setBuscandoOV(false); return }
+    setBuscandoOV(true)
+    let vigente = true  // evita que una respuesta vieja pise a una mas reciente
+    const timer = setTimeout(() => {
+      api.odooBuscarOVs(termino)
+        .then(r => { if (vigente) setOvsBusqueda(r) })
+        .catch(() => { if (vigente) setOvsBusqueda([]) })
+        .finally(() => { if (vigente) setBuscandoOV(false) })
+    }, 500)
+    return () => { vigente = false; clearTimeout(timer) }
+  }, [buscarTexto, modoOdoo])
 
   useEffect(() => {
     api.odooSesion().then(s => {
@@ -663,13 +684,19 @@ function NuevaEntrega({ toast, irDetalle }) {
                     (o.num_ov || '').toLowerCase().includes(termino) ||
                     (o.cliente || '').toLowerCase().includes(termino)
                   )
+                  // Sumar lo que encontro la busqueda directa en Odoo (sin repetir)
+                  const yaEstan = new Set(visibles.map(o => o.num_ov))
+                  visibles = [...visibles, ...ovsBusqueda.filter(o => !yaEstan.has(o.num_ov))]
                 }
                 return visibles.length === 0 ? (
                   <div className="vacio">
-                    {termino ? `Sin coincidencias en Odoo para "${buscarTexto}".` : 'Todas las OVs pendientes ya fueron importadas.'}
+                    {buscandoOV ? 'Buscando en Odoo...'
+                      : termino ? `Sin coincidencias en Odoo para "${buscarTexto}".`
+                      : 'Todas las OVs pendientes ya fueron importadas.'}
                   </div>
                 ) : (
                   <div className="lista-scroll">
+                    {buscandoOV && <div className="cargando" style={{fontSize:11,padding:'6px 14px'}}>Buscando tambien directo en Odoo...</div>}
                     {visibles.map(ov => (
                       <div key={ov.num_ov} className={'fila-ov' + (ov.ya_importada ? ' fila-ov-usada' : '')}
                         onClick={() => importarOdoo(ov)}
@@ -1023,6 +1050,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const [modalConfirmar, setModalConfirmar] = useState(null) // { titulo, mensaje, accion, peligro } | null
   const [modalCambioSistema, setModalCambioSistema] = useState(false)
   const [modalEliminarEntrega, setModalEliminarEntrega] = useState(false)
+  const [modalReapertura, setModalReapertura] = useState(null) // { idTarima } | null
   const [modalEntregaParcial, setModalEntregaParcial] = useState(null) // { excluidos } | null
   const [modoMaster, setModoMaster] = useState({}) // { clave: true } — true = va en caja master
   const [modalSucursal, setModalSucursal] = useState(false)
@@ -1187,9 +1215,14 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const reabrir = async (idTarima) => {
-    try { await api.reabrirTarima(id, idTarima); toast('Tarima reabierta', 'ok'); cargar() }
-    catch (e) { toast(e.message, 'error') }
+  const abrirReapertura = (idTarima) => setModalReapertura({ idTarima })
+  const confirmarReapertura = async (motivo) => {
+    if (!motivo || motivo.length < 5) { toast('Escribe al menos 5 caracteres de motivo', 'error'); return }
+    try {
+      const res = await api.solicitarReaperturaTarima(id, modalReapertura.idTarima, motivo)
+      toast(res.abierta_directo ? 'Tarima reabierta' : 'Solicitud enviada — queda pendiente de autorizacion', 'ok')
+      setModalReapertura(null); cargar()
+    } catch (e) { toast(e.message, 'error') }
   }
 
   const crearExtension = async (cantidad) => {
@@ -1358,7 +1391,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
                           {cerrada ? (
                             <>
                               <button className="btn-mini" onClick={() => verEtiquetas(id, t.id_tarima)}>Ver etiqueta</button>
-                              <button className="btn-mini" onClick={() => reabrir(t.id_tarima)}>Reabrir</button>
+                              <button className="btn-mini" onClick={() => abrirReapertura(t.id_tarima)}>Reabrir</button>
                             </>
                           ) : (
                             <>
@@ -1409,6 +1442,11 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
         <ModalEliminarEntrega numEntrega={ent.num_entrega}
           onClose={() => setModalEliminarEntrega(false)} onConfirmar={eliminarEntregaCompleta} />
       )}
+      {modalReapertura && (
+        <ModalMotivoImpresion titulo="Solicitar reapertura" labelMotivo="Motivo de la reapertura"
+          mensaje="Indica por que se necesita reabrir esta tarima/caja ya cerrada."
+          onClose={() => setModalReapertura(null)} onConfirmar={confirmarReapertura} />
+      )}
       {modalEntregaParcial && (
         <ModalEntregaParcial excluidos={modalEntregaParcial.excluidos}
           onClose={() => setModalEntregaParcial(null)} onConfirmar={confirmarEntregaParcial} />
@@ -1441,7 +1479,7 @@ function VistaEtiquetas({ toast }) {
 
   const fnMarcar = (motivo) => idTarima
     ? api.marcarImpresaTarima(idEntrega, idTarima, motivo)
-    : Promise.all(datos.map(d => api.marcarImpresaTarima(idEntrega, d.id_tarima, motivo)))
+    : api.marcarImpresaLote(idEntrega, datos.map(d => d.id_tarima), motivo)
 
   const imprimir = async () => {
     try { await fnMarcar(null); window.print() }
@@ -1495,6 +1533,13 @@ function VistaEtiquetasSueltas({ toast }) {
   const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null)
+  const [formato, setFormatoEt] = useState(() => {
+    try { return localStorage.getItem('cler_formato_sueltas') === 'grande' ? 'grande' : 'chica' } catch { return 'chica' }
+  })
+  const cambiarFormato = (f) => {
+    setFormatoEt(f)
+    try { localStorage.setItem('cler_formato_sueltas', f) } catch {}
+  }
 
   useEffect(() => {
     api.obtenerEtiquetasSueltas(idEntrega, skusMaster, idsSolo, motivoParcial).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
@@ -1530,9 +1575,13 @@ function VistaEtiquetasSueltas({ toast }) {
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
           <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
+          <select value={formato} onChange={e => cambiarFormato(e.target.value)} style={{marginLeft:8}}>
+            <option value="chica">Etiqueta fisica: chica (4x2")</option>
+            <option value="grande">Etiqueta fisica: grande (3 por hoja)</option>
+          </select>
         </div>
       </div>
-      <EtiquetasSueltas datos={datos} />
+      <EtiquetasSueltas datos={datos} formato={formato} />
       {modalMotivo && (
         <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
           onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
@@ -1605,6 +1654,10 @@ function Migaja() {
   else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
   else if (pathname === '/almacen') { partes.length = 0; partes.push('Almacen') }
   else if (pathname === '/almacen/mapa') { partes.length = 0; partes.push('Almacen', 'Mapa') }
+  else if (pathname === '/almacen/conteo') { partes.length = 0; partes.push('Almacen', 'Conteo de inventario') }
+  else if (seg[0] === 'almacen' && seg[1] === 'conteo' && seg[2]) {
+    partes.length = 0; partes.push('Almacen', 'Conteo de inventario', seg[3] === 'reporte' ? 'Reporte' : seg[2])
+  }
   else if (seg[0] === 'entregas' && seg[1]) {
     partes.push(seg[1])
     if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
@@ -1671,9 +1724,11 @@ export default function App() {
         const clave = s.categoria + '-' + s.id
         if (vistosResolucionRef.current.has(clave)) continue
         const verbo = s.estatus === 'aprobada' ? 'Se autorizó' : 'Se rechazó'
-        const detalle = s.categoria === 'reimpresion'
-          ? `reimpresión de ${TIPO_LABEL[s.tipo] || s.tipo}`
-          : `cambio a ${s.sistema_nuevo}`
+        const detalle = s.categoria !== 'reimpresion'
+          ? `cambio a ${s.sistema_nuevo}`
+          : s.tipo === 'REAPERTURA'
+          ? `reapertura de tarima/caja`
+          : `reimpresión de ${TIPO_LABEL[s.tipo] || s.tipo}`
         toast(`${verbo} tu ${detalle} — ${s.num_entrega}`, s.estatus === 'aprobada' ? 'ok' : 'error')
       }
       vistosResolucionRef.current = idsActuales
@@ -1766,6 +1821,9 @@ export default function App() {
           <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
           <Route path="/almacen" element={<AlmacenPanel toast={toast} />} />
           <Route path="/almacen/mapa" element={<MapaAlmacen toast={toast} />} />
+          <Route path="/almacen/conteo" element={<ConteoPanel toast={toast} />} />
+          <Route path="/almacen/conteo/:id" element={<ConteoCaptura toast={toast} />} />
+          <Route path="/almacen/conteo/:id/reporte" element={<ConteoReporte toast={toast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
