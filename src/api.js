@@ -82,6 +82,8 @@ export const cerrarTarima = (idEntrega, idTarima, dims = {}) =>
 
 export const reabrirTarima = (idEntrega, idTarima) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/reabrir`, { method: 'POST' })
+export const solicitarReaperturaTarima = (idEntrega, idTarima, motivo) =>
+  req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/solicitar-reapertura`, { method: 'POST', body: JSON.stringify({ motivo }) })
 
 export const actualizarDimensiones = (idEntrega, idTarima, dims) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/dimensiones`, {
@@ -113,6 +115,10 @@ export const fusionDetalle = (idsEntregas) =>
 export const obtenerPacking = (idEntrega) => req(`/api/entregas/${idEntrega}/packing`)
 
 // ── CONTROL DE IMPRESION Y REAPERTURA ────────────────────
+export const marcarImpresaLote = (idEntrega, idsTarimas, motivo = null) =>
+  req(`/api/entregas/${idEntrega}/tarimas/marcar-impresa-lote`, {
+    method: 'POST', body: JSON.stringify({ ids_tarimas: idsTarimas, motivo })
+  })
 export const marcarImpresaTarima = (idEntrega, idTarima, motivo = null) =>
   req(`/api/entregas/${idEntrega}/tarimas/${idTarima}/marcar-impresa`, {
     method: 'POST', body: JSON.stringify({ motivo })
@@ -202,6 +208,7 @@ export async function odooSesion() {
 }
 
 export const odooListarOVs = () => req('/api/odoo/ovs')
+export const odooBuscarOVs = (q) => req('/api/odoo/ovs/buscar?q=' + encodeURIComponent(q))
 
 export const odooCargarEntrega = (pickingIds) =>
   req('/api/odoo/entrega', { method: 'POST', body: JSON.stringify(pickingIds) })
@@ -266,6 +273,7 @@ export const listarUbicaciones = (params = {}) => {
   if (params.buscar) q.set('buscar', params.buscar)
   if (params.bodega) q.set('bodega', params.bodega)
   if (params.zona) q.set('zona', params.zona)
+  if (params.producto) q.set('producto', params.producto)
   if (params.soloLibres) q.set('solo_libres', 'true')
   if (params.soloOcupadas) q.set('solo_ocupadas', 'true')
   if (params.soloConStock) q.set('solo_con_stock', 'true')
@@ -275,8 +283,74 @@ export const listarUbicaciones = (params = {}) => {
 
 export const mapaAlmacen = () => req('/api/almacen/mapa')
 
+export const buscarProductoAlmacen = (q) =>
+  req('/api/almacen/producto?q=' + encodeURIComponent(q || ''))
+
+export const sincronizarAlmacen = () => req('/api/almacen/sincronizar', { method: 'POST' })
+
+export const estadoSyncAlmacen = () => req('/api/almacen/estado-sync')
+
+export async function exportarUbicacionesCSV(params = {}) {
+  const q = new URLSearchParams()
+  if (params.bodega) q.set('bodega', params.bodega)
+  if (params.zona) q.set('zona', params.zona)
+  if (params.producto) q.set('producto', params.producto)
+  const qs = q.toString()
+  const headers = {}
+  if (_token) headers['Authorization'] = 'Bearer ' + _token
+  const res = await fetch(API_URL + '/api/almacen/exportar-csv' + (qs ? `?${qs}` : ''), { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Error al exportar CSV')
+  }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'existencias_almacen.csv'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+
+// ── CONTEO DE INVENTARIO ─────────────────────────────────
 export const buscarProductosOdoo = (buscar) =>
   req('/api/almacen/productos-odoo?buscar=' + encodeURIComponent(buscar || ''))
 
-export const asignarProductoUbicacion = (codigo, body) =>
-  req(`/api/almacen/ubicaciones/${codigo}/asignar`, { method: 'POST', body: JSON.stringify(body) })
+export const listarConteos = () => req('/api/conteo/')
+export const crearConteo = (body) => req('/api/conteo/', { method: 'POST', body: JSON.stringify(body) })
+export const detalleConteo = (id) => req(`/api/conteo/${id}`)
+export const ubicacionesConteo = (id, params = {}) => {
+  const q = new URLSearchParams()
+  if (params.estado) q.set('estado', params.estado)
+  if (params.buscar) q.set('buscar', params.buscar)
+  if (params.limite) q.set('limite', params.limite)
+  const qs = q.toString()
+  return req(`/api/conteo/${id}/ubicaciones` + (qs ? `?${qs}` : ''))
+}
+export const verUbicacionConteo = (id, codigo) => req(`/api/conteo/${id}/ubicacion/${encodeURIComponent(codigo)}`)
+export const capturarUbicacionConteo = (id, codigo, body) =>
+  req(`/api/conteo/${id}/ubicacion/${encodeURIComponent(codigo)}`, { method: 'POST', body: JSON.stringify(body) })
+export const cerrarConteo = (id) => req(`/api/conteo/${id}/cerrar`, { method: 'POST' })
+export const reporteConteo = (id) => req(`/api/conteo/${id}/reporte`)
+
+export async function descargarReporteConteoCSV(id, todas = false) {
+  const headers = {}
+  if (_token) headers['Authorization'] = 'Bearer ' + _token
+  const res = await fetch(API_URL + `/api/conteo/${id}/reporte.csv?todas=${todas ? 'true' : 'false'}`, { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Error al exportar el reporte')
+  }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${id}_${todas ? 'completo' : 'diferencias'}.csv`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
+}
