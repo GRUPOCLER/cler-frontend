@@ -1,413 +1,293 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as api from './api.js'
 import { Modal } from './App.jsx'
 
-const ROLES = [
-  { valor: 'operador', nombre: 'Operador', desc: 'Opera los modulos, sin reimpresion ni reapertura' },
-  { valor: 'gerente',  nombre: 'Gerente',  desc: 'Autoriza reimpresiones, reabre entregas, registra operadores' },
-  { valor: 'admin',    nombre: 'Administrador', desc: 'Control total del sistema' },
-]
+const fmt = (n) => Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 })
 
-function chipRol(rol) {
-  const map = { admin: 'chip-warn', gerente: 'chip-raiker', operador: 'chip-ok' }
-  return map[rol] || 'chip-ok'
+// ── MODAL: DETALLE DE UNA UBICACION (solo lectura — se administra en Odoo) ──
+export function ModalUbicacion({ ubicacion, onClose }) {
+  const prods = ubicacion.productos || []
+  return (
+    <Modal titulo={`Ubicacion ${ubicacion.codigo}`}
+      sub={`${ubicacion.bodega || ''} · Zona ${ubicacion.zona || '-'} · Rack ${ubicacion.rack || '-'} · Lado ${ubicacion.lado || '-'} · Tramo ${ubicacion.tramo ?? '-'} · Nivel ${ubicacion.nivel ?? '-'}`}
+      onClose={onClose}
+      footer={<button className="btn-sec" onClick={onClose}>Cerrar</button>}>
+      {prods.length === 0 ? (
+        <div className="vacio">Sin existencia en esta ubicacion.</div>
+      ) : (
+        <table className="tabla">
+          <thead><tr><th>Producto</th><th style={{textAlign:'right'}}>Existencia</th><th style={{textAlign:'right'}}>Reservado</th></tr></thead>
+          <tbody>
+            {prods.map(p => (
+              <tr key={p.clave}>
+                <td><div style={{fontWeight:700}}>{p.clave}</div><div style={{fontSize:11,color:'var(--text3)'}}>{p.descripcion}</div></td>
+                <td style={{textAlign:'right'}}>{fmt(p.cantidad)}</td>
+                <td style={{textAlign:'right'}}>{fmt(p.reservado)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p style={{fontSize:11,color:'var(--text3)',marginTop:12,lineHeight:1.5}}>
+        Las ubicaciones y existencias se administran en Odoo; aqui solo se consultan.
+      </p>
+    </Modal>
+  )
 }
 
-// ── MODAL: CREAR / EDITAR USUARIO ────────────────────────
-function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
-  const editando = !!usuarioActual
-  const soyGerente = miRol === 'gerente'
-  const [usuario, setUsuario] = useState(usuarioActual?.usuario || '')
-  const [email, setEmail] = useState(usuarioActual?.email || '')
-  const [nombre, setNombre] = useState(usuarioActual?.nombre_display || '')
-  const [password, setPassword] = useState('')
-  const [rol, setRol] = useState(usuarioActual?.rol || 'operador')
-  const [activo, setActivo] = useState(usuarioActual ? usuarioActual.activo : true)
-  const [guardando, setGuardando] = useState(false)
+// ── BUSCADOR DE PRODUCTO: donde esta y como esta distribuido ──
+export function BuscadorProducto({ toast, seleccionado, onSeleccionar, onVerMapa, onFiltrar, filtrando }) {
+  const [texto, setTexto] = useState('')
+  const [resultados, setResultados] = useState(null)
+  const [buscando, setBuscando] = useState(false)
+  const debounceRef = useRef()
 
-  const rolesDisponibles = miRol === 'admin' ? ROLES : ROLES.filter(r => r.valor === 'operador')
+  useEffect(() => {
+    if (texto.trim().length < 2) { setResultados(null); return }
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setBuscando(true)
+      try { setResultados(await api.buscarProductoAlmacen(texto.trim())) }
+      catch (e) { toast(e.message, 'error') }
+      finally { setBuscando(false) }
+    }, 350)
+    return () => clearTimeout(debounceRef.current)
+  }, [texto])
 
-  const guardar = async () => {
-    setGuardando(true)
-    try {
-      if (editando) {
-        const body = { nombre_display: nombre, rol, activo, email }
-        if (password) body.password = password
-        await api.editarUsuario(usuario, body)
-        toast('Usuario actualizado', 'ok')
-      } else {
-        await api.crearUsuario({ usuario, password, nombre_display: nombre, rol, email })
-        toast('Usuario creado', 'ok')
-      }
-      onGuardado()
-    } catch (e) { toast(e.message, 'error') }
-    finally { setGuardando(false) }
-  }
+  const elegir = (p) => { onSeleccionar(p); setResultados(null); setTexto('') }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
-        <div className="modal-head">
-          <div className="modal-titulo">{editando ? 'Editar usuario' : soyGerente ? 'Registrar operador' : 'Nuevo usuario'}</div>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body">
-          <label className="dim-label">Usuario</label>
-          <input className="inp" style={{marginBottom:12}} value={usuario}
-            disabled={editando} onChange={e => setUsuario(e.target.value)} />
+    <div className="panel" style={{marginBottom:16}}>
+      <div className="panel-titulo">Buscar equipo o producto</div>
+      <input className="inp" type="text" placeholder="Clave o nombre — ej. tractor, 5 pulgadas, TR-100..."
+        value={texto} onChange={e => setTexto(e.target.value)} />
+      {buscando && <div className="cargando" style={{fontSize:12,padding:'8px 0'}}>Buscando...</div>}
+      {resultados && (
+        resultados.length === 0
+          ? <div className="vacio" style={{fontSize:12,padding:'10px 0 0'}}>Sin existencias con ese nombre o clave.</div>
+          : (
+            <div className="lista-scroll" style={{marginTop:10,maxHeight:220}}>
+              {resultados.map(p => (
+                <div key={p.clave} className="fila-ov" onClick={() => elegir(p)}>
+                  <span className="ov-num">{p.clave}</span>
+                  <span className="ov-cliente">{p.descripcion}</span>
+                  <span className="chip chip-ok">{fmt(p.total)} pzas · {p.ubicaciones} ubic.</span>
+                </div>
+              ))}
+            </div>
+          )
+      )}
 
-          <label className="dim-label">Correo electronico</label>
-          <input className="inp" style={{marginBottom:12}} type="email" value={email}
-            onChange={e => setEmail(e.target.value)} placeholder="nombre@grupocler.com.mx" />
-
-          <label className="dim-label">Nombre para mostrar</label>
-          <input className="inp" style={{marginBottom:12}} value={nombre} onChange={e => setNombre(e.target.value)} />
-
-          <label className="dim-label">{editando ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
-          <input className="inp" style={{marginBottom:12}} type="password" value={password}
-            onChange={e => setPassword(e.target.value)} placeholder={editando ? 'Dejar en blanco para no cambiar' : ''} />
-
-          {!soyGerente && (
-            <>
-              <label className="dim-label">Rol</label>
-              <select className="inp" style={{marginBottom:6}} value={rol} onChange={e => setRol(e.target.value)}>
-                {rolesDisponibles.map(r => <option key={r.valor} value={r.valor}>{r.nombre}</option>)}
-              </select>
-              <div style={{fontSize:11,color:'var(--text3)',marginBottom:12}}>
-                {ROLES.find(r => r.valor === rol)?.desc}
+      {seleccionado && (
+        <div style={{marginTop:14,padding:12,background:'var(--bg3)',borderRadius:10}}>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start',flexWrap:'wrap'}}>
+            <div style={{flex:1,minWidth:200}}>
+              <div style={{fontWeight:800,fontSize:14}}>{seleccionado.clave}</div>
+              <div style={{fontSize:12,color:'var(--text3)'}}>{seleccionado.descripcion}</div>
+              <div style={{fontSize:13,marginTop:6}}>
+                <b>{fmt(seleccionado.total)}</b> en total · <b>{seleccionado.ubicaciones}</b> ubicacion(es)
               </div>
-            </>
-          )}
-
-          {editando && (
-            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
-              <input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} />
-              Cuenta activa
-            </label>
-          )}
+            </div>
+            {onVerMapa && <button className="btn-principal" onClick={() => onVerMapa(seleccionado)}>Ver en el mapa</button>}
+            {onFiltrar && (
+              <button className="btn-sec" onClick={() => onFiltrar(seleccionado)}>
+                {filtrando ? 'Filtrando el listado' : 'Filtrar el listado'}
+              </button>
+            )}
+            <button className="btn-mini" onClick={() => onSeleccionar(null)}>Quitar</button>
+          </div>
+          <table className="tabla" style={{marginTop:10}}>
+            <thead><tr><th>Ubicacion</th><th>Bodega</th><th>Zona</th><th style={{textAlign:'right'}}>Existencia</th></tr></thead>
+            <tbody>
+              {seleccionado.distribucion.map(d => (
+                <tr key={d.codigo}>
+                  <td style={{fontWeight:700,fontFamily:'var(--mono)',fontSize:12}}>
+                    {d.codigo}{!d.en_mapa && <span title="Esta ubicacion existe en Odoo pero no esta dibujada en el mapa" style={{color:'var(--rojo)'}}> ⚠</span>}
+                  </td>
+                  <td>{d.bodega || '—'}</td>
+                  <td>{d.zona || '—'}</td>
+                  <td style={{textAlign:'right',fontWeight:700}}>{fmt(d.cantidad)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="modal-foot">
-          <button className="btn-sec" onClick={onClose}>Cancelar</button>
-          <button className="btn-principal" disabled={guardando || !usuario || (!editando && !password)} onClick={guardar}>
-            {guardando ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
-// ── ALMACENES DE TRASPASO (busca en Odoo, agrega/quita) ──
-function PanelAlmacenes({ toast }) {
-  const [configurados, setConfigurados] = useState(null)
-  const [busqueda, setBusqueda] = useState('')
-  const [resultados, setResultados] = useState(null)
-  const [buscando, setBuscando] = useState(false)
-  const [tipoNuevo, setTipoNuevo] = useState('destino') // que tipo de vigilancia agregar
+// ── PANEL PRINCIPAL ────────────────────────────────────────
+export default function AlmacenPanel({ toast }) {
+  const navigate = useNavigate()
+  const rol = api.getUser()?.rol
+  const puedeSincronizar = rol === 'admin' || rol === 'gerente'
+  const [conteo, setConteo] = useState(null)
+  const [sync, setSync] = useState(null)
+  const [sincronizando, setSincronizando] = useState(false)
+  const [ubicaciones, setUbicaciones] = useState(null)
+  const [buscar, setBuscar] = useState('')
+  const [filtro, setFiltro] = useState('todas') // todas | libres | ocupadas
+  const [bodega, setBodega] = useState('')
+  const [zona, setZona] = useState('')
+  const [producto, setProducto] = useState(null)       // producto elegido en el buscador
+  const [filtrarPorProducto, setFiltrarPorProducto] = useState(false)
+  const [modalUbicacion, setModalUbicacion] = useState(null)
+  const [exportando, setExportando] = useState(false)
+  const debounceRef = useRef()
 
-  const cargarConfigurados = () => api.listarAlmacenesConfigurados().then(setConfigurados).catch(e => toast(e.message, 'error'))
+  const cargarConteo = () => api.contarUbicaciones().then(setConteo).catch(() => {})
+  const cargarSync = () => api.estadoSyncAlmacen().then(setSync).catch(() => {})
 
-  useEffect(() => { cargarConfigurados() }, [])
-
-  const buscar = async () => {
-    setBuscando(true)
-    try { setResultados(await api.buscarAlmacenesOdoo(busqueda)) }
-    catch (e) { toast(e.message, 'error') }
-    finally { setBuscando(false) }
-  }
-
-  const agregar = async (a) => {
+  const sincronizar = async () => {
+    setSincronizando(true)
     try {
-      await api.agregarAlmacen({
-        odoo_warehouse_id: a.id, odoo_location_id: a.location_id,
-        nombre: a.nombre, codigo: a.codigo, tipo: tipoNuevo
-      })
-      toast(`Almacen agregado como ${tipoNuevo}: ${a.nombre}`, 'ok')
-      cargarConfigurados()
+      const r = await api.sincronizarAlmacen()
+      toast(`Existencias actualizadas desde Odoo: ${r.productos} productos en ${r.ubicaciones} ubicaciones`, 'ok')
+      cargarSync(); cargarConteo(); cargarUbicaciones()
+      if (producto) api.buscarProductoAlmacen(producto.clave).then(rs => setProducto(rs.find(x => x.clave === producto.clave) || null)).catch(() => {})
     } catch (e) { toast(e.message, 'error') }
+    finally { setSincronizando(false) }
   }
 
-  const toggleActivo = async (a) => {
-    try { await api.editarAlmacen(a.id, { activo: !a.activo }); cargarConfigurados() }
+  const exportarCSV = async () => {
+    setExportando(true)
+    try { await api.exportarUbicacionesCSV({ bodega, zona, producto: filtrarPorProducto && producto ? producto.clave : '' }) }
     catch (e) { toast(e.message, 'error') }
+    finally { setExportando(false) }
   }
 
-  const quitar = async (a) => {
-    if (!confirm(`¿Quitar "${a.nombre}" de los almacenes vigilados?`)) return
-    try { await api.quitarAlmacen(a.id); toast('Almacen quitado', 'ok'); cargarConfigurados() }
-    catch (e) { toast(e.message, 'error') }
+  const cargarUbicaciones = () => {
+    api.listarUbicaciones({
+      buscar, bodega, zona,
+      producto: filtrarPorProducto && producto ? producto.clave : '',
+      soloLibres: filtro === 'libres',
+      soloOcupadas: filtro === 'ocupadas'
+    }).then(setUbicaciones).catch(e => toast(e.message, 'error'))
   }
 
-  const idsYaConfiguradosComoTipo = new Set((configurados || []).map(a => a.odoo_warehouse_id + '|' + (a.tipo || 'destino')))
+  useEffect(() => { cargarConteo(); cargarSync() }, [])
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(cargarUbicaciones, 300)
+    return () => clearTimeout(debounceRef.current)
+  }, [buscar, filtro, bodega, zona, producto, filtrarPorProducto])
+
+  const elegirProducto = (p) => { setProducto(p); if (!p) setFiltrarPorProducto(false) }
+  const hayFiltros = bodega || zona || buscar || filtro !== 'todas' || filtrarPorProducto
 
   return (
-    <>
-      <div className="panel">
-        <div className="panel-titulo">
-          Almacenes vigilados<span className="chip chip-ok">{configurados ? configurados.length : '…'}</span>
+    <div className="contenedor">
+      <div className="titulo-pag">Almacen</div>
+      <div className="sub-pag">Ubicaciones y existencias del CEDIS Paso del Toro — la informacion viene de Odoo</div>
+
+      <div className="panel" style={{display:'flex',gap:20,marginBottom:16,alignItems:'center',flexWrap:'wrap'}}>
+        <div>
+          <div style={{fontSize:22,fontWeight:800}}>{conteo ? conteo.total : '…'}</div>
+          <div style={{fontSize:12,color:'var(--text3)'}}>Ubicaciones totales</div>
         </div>
-        <p style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>
-          <b>Destino</b>: aparecen traspasos que LLEGAN a este almacen. <b>Origen</b>: aparecen traspasos que SALEN de este almacen, sin importar a donde vayan.
-        </p>
-        {!configurados ? <div className="cargando">Cargando...</div>
-          : configurados.length === 0 ? <div className="vacio">Ninguno configurado todavia — busca abajo y agrega.</div>
-          : (
+        <div>
+          <div style={{fontSize:22,fontWeight:800,color:'var(--rojo)'}}>{conteo ? conteo.ocupadas : '…'}</div>
+          <div style={{fontSize:12,color:'var(--text3)'}}>Con existencia</div>
+        </div>
+        <div>
+          <div style={{fontSize:22,fontWeight:800,color:'var(--cs)'}}>{conteo ? conteo.total - conteo.ocupadas : '…'}</div>
+          <div style={{fontSize:12,color:'var(--text3)'}}>Libres</div>
+        </div>
+        <div style={{marginLeft:'auto',textAlign:'right'}}>
+          <div style={{fontSize:12,color:'var(--text3)',marginBottom:6}}>
+            {sync?.sincronizado ? `Existencias al ${api.formatearFecha(sync.fecha)} · ${sync.productos} productos` : 'Aun no se han traido las existencias de Odoo'}
+          </div>
+          {puedeSincronizar && (
+            <button className="btn-principal" onClick={sincronizar} disabled={sincronizando}>
+              {sincronizando ? 'Actualizando desde Odoo...' : 'Actualizar existencias desde Odoo'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {sync?.sincronizado && sync.sin_mapa > 0 && (
+        <div className="panel" style={{marginBottom:16,borderLeft:'3px solid var(--rojo)',fontSize:12,lineHeight:1.5}}>
+          <b>{sync.sin_mapa}</b> ubicacion(es) de Odoo con existencia no estan dibujadas en el mapa. Ejemplos: {sync.ejemplos_sin_mapa}
+        </div>
+      )}
+
+      <BuscadorProducto toast={toast} seleccionado={producto} onSeleccionar={elegirProducto}
+        filtrando={filtrarPorProducto}
+        onVerMapa={(p) => navigate('/almacen/mapa?producto=' + encodeURIComponent(p.clave))}
+        onFiltrar={() => setFiltrarPorProducto(f => !f)} />
+
+      <div className="panel">
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+          <input className="inp" type="text" placeholder="Buscar por codigo de ubicacion o producto..."
+            value={buscar} onChange={e => setBuscar(e.target.value)} style={{flex:1,minWidth:200}} />
+          <select className="inp" value={bodega} onChange={e => setBodega(e.target.value)} style={{width:150}}>
+            <option value="">Todas las bodegas</option>
+            <option value="Bodega 01">Bodega 01 (ADIS)</option>
+            <option value="Embarques">Embarques</option>
+            <option value="Bodega 02">Bodega 02</option>
+            <option value="Bodega 03">Bodega 03</option>
+            <option value="Bodega 04">Bodega 04</option>
+            <option value="Patio">Patio</option>
+          </select>
+          <select className="inp" value={zona} onChange={e => setZona(e.target.value)} style={{width:130}}>
+            <option value="">Todas las zonas</option>
+            <option value="ORO">Zona Oro</option>
+            <option value="PLATA">Zona Plata</option>
+            <option value="BRONCE">Zona Bronce</option>
+          </select>
+          <button className="btn-sec" onClick={() => navigate('/almacen/mapa')}>Ver mapa completo →</button>
+          <button className="btn-sec" onClick={() => navigate('/almacen/conteo')}>Conteo de inventario →</button>
+          <button className="btn-sec" onClick={exportarCSV} disabled={exportando}>
+            {exportando ? 'Exportando...' : 'Exportar CSV'}
+          </button>
+        </div>
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+          <div className="cm-toggle">
+            <span className={'cm-pill' + (filtro === 'todas' ? ' on' : '')} onClick={() => setFiltro('todas')}>Todas</span>
+            <span className={'cm-pill' + (filtro === 'ocupadas' ? ' on' : '')} onClick={() => setFiltro('ocupadas')}>Con existencia</span>
+            <span className={'cm-pill' + (filtro === 'libres' ? ' on' : '')} onClick={() => setFiltro('libres')}>Libres</span>
+          </div>
+          {filtrarPorProducto && producto && <span className="chip chip-ok">Solo donde hay {producto.clave}</span>}
+          {hayFiltros && (
+            <button className="btn-mini" onClick={() => { setBuscar(''); setBodega(''); setZona(''); setFiltro('todas'); setFiltrarPorProducto(false) }}>
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
+        {!ubicaciones ? <div className="cargando">Cargando...</div>
+          : ubicaciones.length === 0 ? <div className="vacio">Sin resultados.</div> : (
           <table className="tabla">
-            <thead><tr><th>Nombre</th><th>Codigo</th><th>Tipo</th><th>Estatus</th><th>Agrego</th><th></th></tr></thead>
+            <thead><tr><th>Ubicacion</th><th>Bodega</th><th>Producto(s)</th><th style={{textAlign:'right'}}>Existencia</th><th>Zona</th></tr></thead>
             <tbody>
-              {configurados.map(a => (
-                <tr key={a.id}>
-                  <td style={{fontWeight:700}}>{a.nombre}</td>
-                  <td>{a.codigo}</td>
-                  <td><span className={'chip ' + (a.tipo === 'origen' ? 'chip-korei' : 'chip-raiker')}>{a.tipo === 'origen' ? 'Origen' : 'Destino'}</span></td>
-                  <td><span className={a.activo ? 'chip chip-ok' : 'chip chip-warn'}>{a.activo ? 'activo' : 'pausado'}</span></td>
-                  <td style={{fontSize:12,color:'var(--text3)'}}>{a.agregado_por}</td>
-                  <td style={{display:'flex',gap:6}}>
-                    <button className="btn-quitar-mini" onClick={() => toggleActivo(a)}>{a.activo ? 'Pausar' : 'Activar'}</button>
-                    <button className="btn-quitar-mini" onClick={() => quitar(a)}>Quitar</button>
+              {ubicaciones.map(u => (
+                <tr key={u.codigo} style={{cursor:'pointer'}} onClick={() => setModalUbicacion(u)}>
+                  <td style={{fontWeight:700,fontFamily:'var(--mono)',fontSize:12}}>{u.codigo}</td>
+                  <td>{u.bodega}</td>
+                  <td>
+                    {u.productos.length ? u.productos.map(p => (
+                      <div key={p.clave} style={{marginBottom:2}}>
+                        <span style={{fontWeight:700}}>{p.clave}</span>{' '}
+                        <span style={{fontSize:11,color:'var(--text3)'}}>{p.descripcion}</span>
+                      </div>
+                    )) : <span style={{color:'var(--text3)'}}>Libre</span>}
                   </td>
+                  <td style={{textAlign:'right'}}>{u.productos.length ? fmt(u.stock) : '—'}</td>
+                  <td><span className="chip chip-warn">{u.zona}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </div>
-
-      <div className="panel">
-        <div className="panel-titulo">Buscar almacen en Odoo</div>
-        <label className="dim-label">Vigilar como</label>
-        <div className="cm-toggle" style={{marginBottom:14}}>
-          <span className={'cm-pill' + (tipoNuevo === 'destino' ? ' on' : '')} onClick={() => setTipoNuevo('destino')}>Destino</span>
-          <span className={'cm-pill' + (tipoNuevo === 'origen' ? ' on' : '')} onClick={() => setTipoNuevo('origen')}>Origen</span>
-        </div>
-        <div style={{display:'flex',gap:8,marginBottom:12}}>
-          <input type="text" className="inp" placeholder="Ej. CEDIS, Expo, Meli, ALM-PT..."
-            value={busqueda} onChange={e => setBusqueda(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && buscar()} />
-          <button className="btn-principal" onClick={buscar} disabled={buscando}>{buscando ? 'Buscando...' : 'Buscar'}</button>
-        </div>
-        {resultados && (
-          resultados.length === 0 ? <div className="vacio">Sin resultados.</div> : (
-            <div className="lista-scroll">
-              {resultados.map(a => (
-                <div key={a.id} className="fila-ov">
-                  <span className="ov-num">{a.codigo}</span>
-                  <span className="ov-cliente">{a.nombre}</span>
-                  {idsYaConfiguradosComoTipo.has(a.id + '|' + tipoNuevo) ? (
-                    <span className="chip chip-ok">Ya agregado como {tipoNuevo}</span>
-                  ) : (
-                    <button className="btn-mini btn-mini-primario" onClick={() => agregar(a)}>+ Agregar como {tipoNuevo}</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )
+        {ubicaciones && ubicaciones.length === 300 && (
+          <div style={{fontSize:12,color:'var(--text3)',marginTop:10}}>Mostrando los primeros 300 — afina la busqueda o el filtro para ver otros.</div>
         )}
       </div>
-    </>
-  )
-}
 
-// ── PANEL DE ADMINISTRACION (solo Admin: usuarios + bitacora) ───
-// ── MODAL: ALMACENES AUTORIZADOS DEL USUARIO ─────────────
-function ModalAlmacenesUsuario({ usuario, onClose, toast }) {
-  const [asignados, setAsignados] = useState(null)
-  const [busqueda, setBusqueda] = useState('')
-  const [resultados, setResultados] = useState(null)
-  const [buscando, setBuscando] = useState(false)
-
-  const cargarAsignados = () => api.listarAlmacenesUsuario(usuario).then(setAsignados).catch(e => toast(e.message, 'error'))
-
-  useEffect(() => { cargarAsignados() }, [])
-
-  const buscar = async () => {
-    setBuscando(true)
-    try { setResultados(await api.buscarAlmacenesOdoo(busqueda)) }
-    catch (e) { toast(e.message, 'error') }
-    finally { setBuscando(false) }
-  }
-
-  const agregar = async (a) => {
-    try {
-      await api.agregarAlmacenUsuario(usuario, { odoo_warehouse_id: a.id, nombre: a.nombre, codigo: a.codigo })
-      toast('Almacen asignado', 'ok')
-      cargarAsignados()
-    } catch (e) { toast(e.message, 'error') }
-  }
-
-  const quitar = async (a) => {
-    try { await api.quitarAlmacenUsuario(a.id); toast('Almacen quitado', 'ok'); cargarAsignados() }
-    catch (e) { toast(e.message, 'error') }
-  }
-
-  const idsYaAsignados = new Set((asignados || []).map(a => a.odoo_warehouse_id))
-
-  return (
-    <Modal titulo="Almacenes autorizados" sub={`Usuario: ${usuario}`} onClose={onClose}
-      footer={<button className="btn-sec" onClick={onClose}>Cerrar</button>}>
-      <div style={{fontSize:11,color:'var(--text3)',marginBottom:14,lineHeight:1.5}}>
-        Si no asignas ninguno, este usuario ve todas las OVs de Odoo sin restriccion.
-        En cuanto agregues al menos uno, solo vera OVs de esos almacenes.
-      </div>
-
-      <div className="panel-titulo" style={{fontSize:12}}>
-        Asignados<span className="chip chip-ok">{asignados ? asignados.length : '…'}</span>
-      </div>
-      {!asignados ? <div className="cargando">Cargando...</div>
-        : asignados.length === 0 ? <div className="vacio">Ninguno — sin restriccion.</div>
-        : (
-        <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
-          {asignados.map(a => (
-            <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 10px',background:'var(--bg3)',borderRadius:6}}>
-              <span style={{fontWeight:700,fontSize:12,flex:1}}>{a.nombre}</span>
-              <span style={{fontSize:11,color:'var(--text3)'}}>{a.codigo}</span>
-              <button className="btn-quitar-mini" onClick={() => quitar(a)}>Quitar</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="panel-titulo" style={{fontSize:12,marginTop:6}}>Buscar almacen en Odoo</div>
-      <div style={{display:'flex',gap:8,marginBottom:12}}>
-        <input type="text" className="inp" placeholder="Ej. MAY-MAQ, CDIS..."
-          value={busqueda} onChange={e => setBusqueda(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && buscar()} />
-        <button className="btn-principal" onClick={buscar} disabled={buscando}>{buscando ? '...' : 'Buscar'}</button>
-      </div>
-      {resultados && (
-        resultados.length === 0 ? <div className="vacio">Sin resultados.</div> : (
-          <div className="lista-scroll">
-            {resultados.map(a => (
-              <div key={a.id} className="fila-ov">
-                <span className="ov-num">{a.codigo}</span>
-                <span className="ov-cliente">{a.nombre}</span>
-                {idsYaAsignados.has(a.id) ? (
-                  <span className="chip chip-ok">Ya asignado</span>
-                ) : (
-                  <button className="btn-mini btn-mini-primario" onClick={() => agregar(a)}>+ Agregar</button>
-                )}
-              </div>
-            ))}
-          </div>
-        )
-      )}
-    </Modal>
-  )
-}
-
-export default function AdminPanel({ toast, miRol }) {
-  const [tab, setTab] = useState('usuarios')
-  const [usuarios, setUsuarios] = useState(null)
-  const [logs, setLogs] = useState(null)
-  const [modalUsuario, setModalUsuario] = useState(undefined)
-  const [modalAlmacenesUsuario, setModalAlmacenesUsuario] = useState(null) // nombre de usuario | null
-
-  const cargarUsuarios = () => api.listarUsuarios().then(setUsuarios).catch(e => toast(e.message, 'error'))
-  const cargarLogs     = () => api.verLogs().then(setLogs).catch(e => toast(e.message, 'error'))
-
-  useEffect(() => {
-    if (tab === 'usuarios' && !usuarios) cargarUsuarios()
-    if (tab === 'logs' && !logs) cargarLogs()
-  }, [tab])
-
-  // Un Gerente solo puede registrar operadores, sin ver listas
-  if (miRol === 'gerente') {
-    return (
-      <div className="contenedor">
-        <div className="titulo-pag">Registrar operador</div>
-        <div className="sub-pag">Como Gerente puedes dar de alta cuentas de Operador</div>
-        <div className="panel">
-          <button className="btn-principal" onClick={() => setModalUsuario(null)}>+ Registrar operador</button>
-        </div>
-        {modalUsuario !== undefined && (
-          <ModalUsuario usuarioActual={modalUsuario} miRol={miRol} toast={toast}
-            onClose={() => setModalUsuario(undefined)}
-            onGuardado={() => setModalUsuario(undefined)} />
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="contenedor">
-      <div className="titulo-pag">Administracion</div>
-      <div className="sub-pag">Usuarios, roles y bitacora de acciones</div>
-
-      <div className="topbar-nav" style={{marginBottom:20}}>
-        <button className={'nav-btn' + (tab === 'usuarios' ? ' activo' : '')} onClick={() => setTab('usuarios')}>Usuarios</button>
-        <button className={'nav-btn' + (tab === 'almacenes' ? ' activo' : '')} onClick={() => setTab('almacenes')}>Almacenes de traspaso</button>
-        <button className={'nav-btn' + (tab === 'logs' ? ' activo' : '')} onClick={() => setTab('logs')}>Bitacora</button>
-      </div>
-
-      {tab === 'almacenes' && <PanelAlmacenes toast={toast} />}
-
-      {tab === 'usuarios' && (
-        <div className="panel">
-          <div className="panel-titulo">
-            Usuarios
-            {usuarios && <span className="chip chip-ok">{usuarios.length}</span>}
-            <button className="btn-mini btn-mini-primario" style={{marginLeft:'auto'}} onClick={() => setModalUsuario(null)}>
-              + Nuevo usuario
-            </button>
-          </div>
-          {!usuarios ? <div className="cargando">Cargando...</div>
-            : usuarios.length === 0 ? <div className="vacio">Sin usuarios.</div>
-            : (
-            <table className="tabla">
-              <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estatus</th><th>Último acceso</th><th></th></tr></thead>
-              <tbody>
-                {usuarios.map(u => (
-                  <tr key={u.usuario} onClick={() => setModalUsuario(u)}>
-                    <td style={{fontWeight:700}}>{u.usuario}</td>
-                    <td>{u.nombre_display || '—'}</td>
-                    <td><span className={'chip ' + chipRol(u.rol)}>{u.rol}</span></td>
-                    <td><span className={u.activo ? 'chip chip-ok' : 'chip chip-warn'}>{u.activo ? 'activo' : 'inactivo'}</span></td>
-                    <td style={{fontSize:11,color:'var(--text3)'}}>{u.ultimo_acceso ? api.formatearFecha(u.ultimo_acceso) : '—'}</td>
-                    <td style={{display:'flex',gap:6}}>
-                      <button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalUsuario(u) }}>Editar</button>
-                      <button className="btn-quitar-mini" onClick={e => { e.stopPropagation(); setModalAlmacenesUsuario(u.usuario) }}>Almacenes</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {tab === 'logs' && (
-        <div className="panel">
-          <div className="panel-titulo">Bitacora reciente{logs && <span className="chip chip-ok">{logs.length}</span>}</div>
-          {!logs ? <div className="cargando">Cargando...</div>
-            : logs.length === 0 ? <div className="vacio">Sin registros.</div>
-            : (
-            <table className="tabla">
-              <thead><tr><th>Fecha</th><th>Usuario</th><th>Accion</th><th>Detalle</th><th>Resultado</th></tr></thead>
-              <tbody>
-                {logs.map(l => (
-                  <tr key={l.id}>
-                    <td style={{fontSize:11,color:'var(--text3)'}}>{api.formatearFecha(l.fecha)}</td>
-                    <td style={{}}>{l.usuario}</td>
-                    <td>{l.accion}</td>
-                    <td style={{color:'var(--text2)'}}>{l.detalle}</td>
-                    <td><span className={l.exito ? 'chip chip-ok' : 'chip chip-warn'}>{l.exito ? 'ok' : 'error'}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {modalUsuario !== undefined && (
-        <ModalUsuario usuarioActual={modalUsuario} miRol={miRol} toast={toast}
-          onClose={() => setModalUsuario(undefined)}
-          onGuardado={() => { setModalUsuario(undefined); cargarUsuarios() }} />
-      )}
-      {modalAlmacenesUsuario && (
-        <ModalAlmacenesUsuario usuario={modalAlmacenesUsuario} toast={toast}
-          onClose={() => setModalAlmacenesUsuario(null)} />
-      )}
+      {modalUbicacion && <ModalUbicacion ubicacion={modalUbicacion} onClose={() => setModalUbicacion(null)} />}
     </div>
   )
 }
