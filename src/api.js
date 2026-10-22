@@ -336,6 +336,26 @@ export const capturarUbicacionConteo = (id, codigo, body) =>
 export const cerrarConteo = (id) => req(`/api/conteo/${id}/cerrar`, { method: 'POST' })
 export const reporteConteo = (id) => req(`/api/conteo/${id}/reporte`)
 
+export const movimientosConteo = (id) => req(`/api/conteo/${id}/movimientos`)
+export async function descargarMovimientosConteoCSV(id) {
+  const headers = {}
+  if (_token) headers['Authorization'] = 'Bearer ' + _token
+  const res = await fetch(API_URL + `/api/conteo/${id}/movimientos.csv`, { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Error al exportar la validacion')
+  }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${id}_validacion_movimientos.csv`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
+}
+
 export async function descargarReporteConteoCSV(id, todas = false) {
   const headers = {}
   if (_token) headers['Authorization'] = 'Bearer ' + _token

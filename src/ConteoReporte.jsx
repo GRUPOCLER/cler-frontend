@@ -34,6 +34,140 @@ function Barras({ filas }) {
   )
 }
 
+
+const ESTADO_MOV = {
+  explicada:    { txt: 'Explicada por movimientos', cls: 'chip chip-ok' },
+  parcial:      { txt: 'Explicada en parte',        cls: 'chip chip-warn' },
+  sin_explicar: { txt: 'Sin explicar',              cls: 'chip chip-err' },
+}
+
+function ValidacionMovimientos({ id, toast }) {
+  const [m, setM] = useState(null)
+  const [cargando, setCargando] = useState(false)
+  const [ver, setVer] = useState('diferencias')      // diferencias | ovs | traslados | otros
+  const [soloPend, setSoloPend] = useState(false)
+
+  const cargar = async () => {
+    setCargando(true)
+    try { setM(await api.movimientosConteo(id)) } catch (e) { toast(e.message, 'error') }
+    setCargando(false)
+  }
+  const exportar = async () => { try { await api.descargarMovimientosConteoCSV(id) } catch (e) { toast(e.message, 'error') } }
+
+  const rs = m && m.resumen
+  const difs = m ? m.diferencias.filter(d => !soloPend || d.estado !== 'explicada') : []
+  return (
+    <div className="panel" style={{marginTop:14}}>
+      <div className="panel-titulo">Validacion contra movimientos de Odoo (OVs surtidas y traslados)</div>
+      <div style={{fontSize:12,color:'var(--text3)',marginBottom:10,lineHeight:1.5}}>
+        Revisa, solo en lectura, que salio de las ubicaciones del conteo mientras se contaba: OVs surtidas, traslados entre
+        ubicaciones, entradas y ajustes. Asi puedes saber si una diferencia se debe a un movimiento y no a un error de inventario.
+      </div>
+      {!m && <button className="btn-principal" disabled={cargando} onClick={cargar}>{cargando ? 'Consultando Odoo...' : 'Consultar movimientos en Odoo'}</button>}
+      {m && (
+        <>
+          <div style={{fontSize:11,color:'var(--text3)',marginBottom:10}}>
+            Ventana revisada: {m.ventana.desde} → {m.ventana.hasta} (UTC)
+            {m.ventana.base_existencias ? ` · existencias base tomadas ${m.ventana.base_existencias}` : ''}
+          </div>
+          <div className="stats" style={{flexWrap:'wrap'}}>
+            <Tarjeta titulo="Explicadas" valor={rs.explicada} color="var(--cs)" sub={`de ${rs.diferencias} diferencias`} />
+            <Tarjeta titulo="En parte" valor={rs.parcial} color={rs.parcial ? 'var(--amarillo)' : undefined} />
+            <Tarjeta titulo="Sin explicar" valor={rs.sin_explicar} color={rs.sin_explicar ? 'var(--rojo)' : undefined} sub="revisar fisicamente" />
+            <Tarjeta titulo="OVs surtidas" valor={rs.ovs} sub={`${fmt(rs.unidades_ov)} unidades`} />
+            <Tarjeta titulo="Traslados" valor={rs.traslados} sub={`${rs.otros_movimientos} entradas/ajustes`} />
+          </div>
+          <div className="no-print" style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',margin:'12px 0'}}>
+            <div className="cm-toggle">
+              {[['diferencias','Diferencias'],['ovs','OVs surtidas'],['traslados','Traslados'],['otros','Entradas / ajustes']].map(([k, l]) => (
+                <span key={k} className={'cm-pill' + (ver === k ? ' on' : '')} onClick={() => setVer(k)}>{l}</span>
+              ))}
+            </div>
+            {ver === 'diferencias' && (
+              <label style={{fontSize:12}}><input type="checkbox" checked={soloPend} onChange={e => setSoloPend(e.target.checked)} /> Solo las no explicadas del todo</label>
+            )}
+            <div style={{flex:1}}></div>
+            <button className="btn-sec" onClick={cargar} disabled={cargando}>{cargando ? 'Consultando...' : 'Actualizar'}</button>
+            <button className="btn-sec" onClick={exportar}>CSV de validacion</button>
+          </div>
+
+          {ver === 'diferencias' && (difs.length === 0 ? <div className="vacio">Sin diferencias para mostrar.</div> : (
+            <table className="tabla">
+              <thead><tr><th>Ubicacion</th><th>Producto</th><th style={{textAlign:'right'}}>Diferencia</th><th style={{textAlign:'right'}}>Mov. Odoo</th><th style={{textAlign:'right'}}>Sin explicar</th><th>Estado y movimientos</th></tr></thead>
+              <tbody>
+                {difs.slice(0, 500).map((d, i) => (
+                  <tr key={d.codigo + d.producto + i}>
+                    <td style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:12}}>{d.codigo}</td>
+                    <td><b>{d.producto}</b><div style={{fontSize:11,color:'var(--text3)'}}>{d.descripcion}</div></td>
+                    <td style={{textAlign:'right',fontWeight:800,color: d.diferencia < 0 ? 'var(--rojo)' : 'var(--amarillo)'}}>{d.diferencia > 0 ? '+' : ''}{fmt(d.diferencia)}</td>
+                    <td style={{textAlign:'right'}}>{d.movimiento_neto > 0 ? '+' : ''}{fmt(d.movimiento_neto)}</td>
+                    <td style={{textAlign:'right',fontWeight:700}}>{fmt(d.diferencia_sin_explicar)}</td>
+                    <td style={{fontSize:11}}>
+                      <span className={ESTADO_MOV[d.estado].cls}>{ESTADO_MOV[d.estado].txt}</span>
+                      {d.movimientos.map((x, j) => (
+                        <div key={j} style={{color:'var(--text3)',marginTop:2}}>
+                          {x.tipo === 'OV' ? 'OV ' : x.tipo === 'traslado' ? 'Traslado ' : x.tipo === 'entrada' ? 'Entrada ' : 'Ajuste '}
+                          <b>{x.documento}</b> · {x.cantidad > 0 ? '+' : ''}{fmt(x.cantidad)}{x.tipo === 'traslado' ? ` (${x.origen} → ${x.destino})` : ''} · {x.fecha}
+                        </div>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+
+          {ver === 'ovs' && (m.ovs.length === 0 ? <div className="vacio">No se surtieron OVs desde estas ubicaciones durante el conteo.</div> : (
+            <table className="tabla">
+              <thead><tr><th>OV</th><th>Entrega</th><th>Cliente</th><th>Fecha</th><th>Detalle</th><th style={{textAlign:'right'}}>Uds</th></tr></thead>
+              <tbody>
+                {m.ovs.map((o, i) => (
+                  <tr key={o.picking + i}>
+                    <td style={{fontWeight:700}}>{o.ov || '—'}</td>
+                    <td style={{fontFamily:'var(--mono)',fontSize:12}}>{o.picking}</td>
+                    <td style={{fontSize:12}}>{o.cliente}</td>
+                    <td style={{fontSize:11}}>{o.fecha}</td>
+                    <td style={{fontSize:11}}>{o.lineas.map((l, j) => <div key={j}><b>{l.producto}</b> × {fmt(l.cantidad)} · <span style={{fontFamily:'var(--mono)'}}>{l.ubicacion}</span></div>)}</td>
+                    <td style={{textAlign:'right',fontWeight:700}}>{fmt(o.unidades)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+
+          {ver === 'traslados' && (m.traslados.length === 0 ? <div className="vacio">No hubo traslados internos durante el conteo.</div> : (
+            <table className="tabla">
+              <thead><tr><th>Traslado</th><th>Fecha</th><th>Producto</th><th style={{textAlign:'right'}}>Cant.</th><th>Origen → Destino</th></tr></thead>
+              <tbody>
+                {m.traslados.map((t, i) => (
+                  <tr key={i}>
+                    <td style={{fontFamily:'var(--mono)',fontSize:12}}>{t.picking}</td><td style={{fontSize:11}}>{t.fecha}</td>
+                    <td><b>{t.producto}</b><div style={{fontSize:11,color:'var(--text3)'}}>{t.descripcion}</div></td>
+                    <td style={{textAlign:'right',fontWeight:700}}>{fmt(t.cantidad)}</td>
+                    <td style={{fontFamily:'var(--mono)',fontSize:12}}>{t.origen} → {t.destino}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+
+          {ver === 'otros' && (m.otros.length === 0 ? <div className="vacio">Sin entradas ni ajustes durante el conteo.</div> : (
+            <table className="tabla">
+              <thead><tr><th>Tipo</th><th>Documento</th><th>Fecha</th><th>Producto</th><th style={{textAlign:'right'}}>Cant.</th><th>Origen → Destino</th></tr></thead>
+              <tbody>
+                {m.otros.map((t, i) => (
+                  <tr key={i}><td>{t.tipo}</td><td style={{fontFamily:'var(--mono)',fontSize:12}}>{t.documento}</td><td style={{fontSize:11}}>{t.fecha}</td>
+                    <td><b>{t.producto}</b></td><td style={{textAlign:'right'}}>{fmt(t.cantidad)}</td><td style={{fontFamily:'var(--mono)',fontSize:12}}>{t.origen} → {t.destino}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function ConteoReporte({ toast }) {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -158,6 +292,8 @@ export default function ConteoReporte({ toast }) {
         )}
         {difs.length > 500 && <div style={{fontSize:12,color:'var(--text3)',marginTop:8}}>Mostrando 500 de {difs.length}; el CSV trae todas.</div>}
       </div>
+
+      <div className="no-print"><ValidacionMovimientos id={id} toast={toast} /></div>
 
       <p style={{fontSize:11,color:'var(--text3)',marginTop:14,lineHeight:1.5}}>
         Este reporte no modifica Odoo. Los ajustes de inventario se hacen en Odoo a partir de las diferencias, idealmente despues de revisar las ubicaciones con diferencia.
