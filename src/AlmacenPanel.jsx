@@ -118,11 +118,80 @@ export function BuscadorProducto({ toast, seleccionado, onSeleccionar, onVerMapa
   )
 }
 
+// ── IMPORTAR LAYOUT (solo admin) ───────────────────────────
+function ImportarLayout({ toast, onListo }) {
+  const [archivo, setArchivo] = useState(null)
+  const [info, setInfo] = useState(null)       // { elementos, version, nombre }
+  const [reemplazar, setReemplazar] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
+  const [abierto, setAbierto] = useState(false)
+
+  const elegir = async (f) => {
+    setArchivo(null); setInfo(null)
+    if (!f) return
+    try {
+      const data = JSON.parse(await f.text())
+      const n = Array.isArray(data.elements) ? data.elements.length : 0
+      if (!n) { toast('El archivo no trae "elements": no parece un layout valido', 'error'); return }
+      setArchivo(f)
+      setInfo({ elementos: n, version: data.version || '', nombre: data.sheet_name || f.name })
+    } catch { toast('El archivo no es un JSON valido', 'error') }
+  }
+
+  const importar = async () => {
+    const aviso = reemplazar
+      ? `Se importaran ${info.elementos} ubicaciones y SE BORRARAN las que ya existen y no vienen en este archivo. ¿Continuar?`
+      : `Se importaran ${info.elementos} ubicaciones (se agregan las nuevas y se actualizan las existentes). ¿Continuar?`
+    if (!window.confirm(aviso)) return
+    setSubiendo(true)
+    try {
+      const r = await api.importarLayoutAlmacen(archivo, reemplazar)
+      toast(`Layout importado: ${r.insertados} nuevas, ${r.actualizados} actualizadas, ${r.eliminados} eliminadas`, 'ok')
+      setArchivo(null); setInfo(null); setReemplazar(false)
+      onListo()
+    } catch (e) { toast(e.message, 'error') }
+    finally { setSubiendo(false) }
+  }
+
+  return (
+    <div className="panel" style={{marginBottom:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={() => setAbierto(a => !a)}>
+        <div style={{fontWeight:700}}>Importar mapa / layout</div>
+        <div style={{fontSize:12,color:'var(--text3)'}}>Solo administrador · {abierto ? 'ocultar' : 'mostrar'}</div>
+      </div>
+      {abierto && (
+        <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:10,fontSize:13}}>
+          <div style={{fontSize:12,color:'var(--text3)',lineHeight:1.5}}>
+            Sube el archivo JSON del mapa (ej. <b>layout_cedis_v2.json</b>). Despues presiona
+            "Actualizar existencias desde Odoo" para ver el stock en las ubicaciones nuevas.
+          </div>
+          <input type="file" accept=".json,application/json" onChange={e => elegir(e.target.files[0])} />
+          {info && (
+            <div style={{fontSize:12}}>
+              <b>{info.nombre}</b>{info.version ? ` · ${info.version}` : ''} · {info.elementos} elementos
+            </div>
+          )}
+          <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
+            <input type="checkbox" checked={reemplazar} onChange={e => setReemplazar(e.target.checked)} />
+            Reemplazar: borrar las ubicaciones que no vengan en este archivo
+          </label>
+          <div>
+            <button className="btn-principal" onClick={importar} disabled={!archivo || subiendo}>
+              {subiendo ? 'Importando...' : 'Importar layout'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── PANEL PRINCIPAL ────────────────────────────────────────
 export default function AlmacenPanel({ toast }) {
   const navigate = useNavigate()
   const rol = api.getUser()?.rol
   const puedeSincronizar = rol === 'admin' || rol === 'gerente'
+  const esAdmin = rol === 'admin'
   const [conteo, setConteo] = useState(null)
   const [sync, setSync] = useState(null)
   const [sincronizando, setSincronizando] = useState(false)
@@ -207,6 +276,8 @@ export default function AlmacenPanel({ toast }) {
           )}
         </div>
       </div>
+
+      {esAdmin && <ImportarLayout toast={toast} onListo={() => { cargarConteo(); cargarSync(); cargarUbicaciones() }} />}
 
       {sync?.sincronizado && sync.sin_mapa > 0 && (
         <div className="panel" style={{marginBottom:16,borderLeft:'3px solid var(--rojo)',fontSize:12,lineHeight:1.5}}>

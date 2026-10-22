@@ -290,6 +290,21 @@ export const sincronizarAlmacen = () => req('/api/almacen/sincronizar', { method
 
 export const estadoSyncAlmacen = () => req('/api/almacen/estado-sync')
 
+// Importa el layout (JSON del mapa). Solo admin. reemplazar=true borra las ubicaciones que ya no vienen en el archivo.
+export async function importarLayoutAlmacen(archivo, reemplazar = false) {
+  const fd = new FormData()
+  fd.append('archivo', archivo)
+  const headers = {}
+  if (_token) headers['Authorization'] = 'Bearer ' + _token
+  const res = await fetch(API_URL + '/api/almacen/importar-layout?reemplazar=' + reemplazar, { method: 'POST', headers, body: fd })
+  if (res.status === 401) { logout(); window.location.reload(); return }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Error ' + res.status)
+  }
+  return res.json()
+}
+
 export async function exportarUbicacionesCSV(params = {}) {
   const q = new URLSearchParams()
   if (params.bodega) q.set('bodega', params.bodega)
