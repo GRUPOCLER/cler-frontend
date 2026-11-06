@@ -3,6 +3,7 @@
 //  Formato compacto 4x2 pulgadas (etiqueta termica)
 // ============================================================
 import { useEffect } from 'react'
+import { fmtKg } from './formato'
 
 // Le dice al navegador que el tamano de pagina de impresion ES 4x2in,
 // para que no encoja el contenido al asumir tamano Carta por defecto.
@@ -42,7 +43,7 @@ function PaginaEtiquetaSuelta({ d }) {
         <div className="et-suelta-cant-wrap">
           <div className="et-suelta-cant">{d.cantidad}</div>
           <div className="et-suelta-unidad">{d.unidad}</div>
-          {d.peso_kg > 0 && <div className="et-suelta-peso">{d.peso_kg} kg</div>}
+          {d.peso_kg > 0 && <div className="et-suelta-peso">{fmtKg(d.peso_kg)}</div>}
         </div>
         <div className="et-suelta-bc-wrap">
           {d.barcode_entrega_url && <img src={d.barcode_entrega_url} className="et-suelta-bc-img" alt="bc" />}
@@ -60,7 +61,7 @@ export default function EtiquetasSueltas({ datos, formato = 'chica' }) {
   if (!grande) {
     return (
       <div className="et-suelta-wrap">
-        {datos.map(d => <PaginaEtiquetaSuelta key={d.id_producto} d={d} />)}
+        {datos.map((d, i) => <PaginaEtiquetaSuelta key={i} d={d} />)}
       </div>
     )
   }
@@ -70,8 +71,8 @@ export default function EtiquetasSueltas({ datos, formato = 'chica' }) {
     <div className="et-suelta-wrap">
       {hojas.map((grupo, i) => (
         <div className="et-suelta-hoja" key={i}>
-          {grupo.map(d => (
-            <div className="et-suelta-slot" key={d.id_producto}>
+          {grupo.map((d, j) => (
+            <div className="et-suelta-slot" key={j}>
               <div className="et-suelta-escala"><PaginaEtiquetaSuelta d={d} /></div>
             </div>
           ))}

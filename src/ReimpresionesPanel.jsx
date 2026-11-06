@@ -2,7 +2,22 @@ import { useState, useEffect } from 'react'
 import * as api from './api.js'
 import { Modal } from './App.jsx'
 
-const TIPO_LABEL = { TARIMA: 'Carga agrupada', SUELTAS: 'Carga suelta', PACKING: 'Lista de empaque', REAPERTURA: 'Reapertura de tarima/caja' }
+const TIPO_LABEL = { TARIMA: 'Carga agrupada', SUELTAS: 'Carga suelta', PACKING: 'Lista de empaque', PACKING_PARCIAL: 'Lista de empaque parcial', REAPERTURA: 'Reapertura de tarima/caja' }
+
+function ResumenParcial({ json }) {
+  let sel = {}
+  try { sel = JSON.parse(json || '{}') } catch { sel = {} }
+  const nT = (sel.tarimas || []).length
+  const sueltos = Object.entries(sel.sueltos || {})
+  const res = sel.resumen || null
+  return (
+    <div style={{marginTop:8}}>
+      <b>Incluye:</b> {nT} bulto(s) agrupado(s) y {sueltos.length} linea(s) suelta(s)
+      {nT > 0 && <div>Bultos: {res ? res.bultos.join(', ') : sel.tarimas.join(', ')}</div>}
+      {sueltos.length > 0 && <div>Cantidades sueltas: {res ? res.sueltos.map(x => `${x.clave} x${x.cantidad}`).join(', ') : sueltos.map(([id, n]) => `${id} x${n}`).join(', ')}</div>}
+    </div>
+  )
+}
 
 function ModalResolver({ solicitud, accion, onClose, onConfirmar }) {
   const [comentario, setComentario] = useState('')
@@ -18,6 +33,7 @@ function ModalResolver({ solicitud, accion, onClose, onConfirmar }) {
       </>}>
       <div style={{fontSize:12,color:'var(--text2)',marginBottom:10,background:'var(--bg3)',padding:10,borderRadius:6}}>
         <b>Motivo del solicitante:</b><br/>{solicitud.motivo}
+        {solicitud.tipo === 'PACKING_PARCIAL' && <ResumenParcial json={solicitud.datos_json} />}
       </div>
       <label className="dim-label">Comentario {esAprobar ? '(opcional)' : ''}</label>
       <textarea className="inp" rows={2} style={{resize:'vertical'}} value={comentario}

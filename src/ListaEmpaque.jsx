@@ -1,8 +1,20 @@
 // ============================================================
 //  LISTA DE EMPAQUE (PACKING LIST) — imprimible
 // ============================================================
+import { useEffect } from 'react'
+import { fmtKg, unirPorClave } from './formato'
+
+function usarTamanoPagina(reglaCss) {
+  useEffect(() => {
+    const estilo = document.createElement('style')
+    estilo.textContent = reglaCss
+    document.head.appendChild(estilo)
+    return () => document.head.removeChild(estilo)
+  }, [reglaCss])
+}
 
 export default function ListaEmpaque({ datos }) {
+  usarTamanoPagina('@page { size: letter portrait; margin: 10mm; }')
   const { entrega, es_fusion, entregas_involucradas, remitente, tarimas, sueltos, total_bultos, total_piezas,
     peso_palet_total_kg, peso_mercancia_kg, peso_total_kg } = datos
 
@@ -12,6 +24,12 @@ export default function ListaEmpaque({ datos }) {
 
   return (
     <div className="pk-doc">
+      {datos.es_parcial && (
+        <div className="pk-banner-parcial">
+          LISTA PARCIAL — incluye solo lo que se envio. Autorizo: {datos.parcial?.autorizado_por || '-'}
+          {datos.parcial?.motivo ? ` | Motivo: ${datos.parcial.motivo}` : ''}
+        </div>
+      )}
       {es_fusion && (
         <div className="pk-banner-fusion">
           EMBARQUE CON {entregas_involucradas.length} ORDENES DE VENTA DEL MISMO CLIENTE
@@ -26,7 +44,7 @@ export default function ListaEmpaque({ datos }) {
               <div className="pk-remitente-nombre">{remitente}</div>
             </td>
             <td className="pk-box pk-box-titulo">
-              <div className="pk-titulo-grande">PACKING LIST</div>
+              <div className="pk-titulo-grande">PACKING LIST{datos.es_parcial ? ' (PARCIAL)' : ''}</div>
               <div className="pk-label">Lista de Empaque</div>
               <div className="pk-fecha">Fecha: {fecha}</div>
             </td>
@@ -73,9 +91,9 @@ export default function ListaEmpaque({ datos }) {
                 </th>
                 <th className="pk-bulto-meta" colSpan={3}>
                   Piezas: <b>{t.total_piezas}</b>
-                  {t.peso_neto_kg > 0 && <> &nbsp;|&nbsp; Peso mercancia: <b>{t.peso_neto_kg} kg</b></>}
-                  {t.peso_palet_kg > 0 && <> &nbsp;|&nbsp; Palet: <b>{t.peso_palet_kg} kg</b></>}
-                  {t.peso_bruto_kg > 0 && <> &nbsp;|&nbsp; Bruto: <b>{t.peso_bruto_kg} kg</b></>}
+                  {t.peso_neto_kg > 0 && <> &nbsp;|&nbsp; Peso mercancia: <b>{fmtKg(t.peso_neto_kg)}</b></>}
+                  {t.peso_palet_kg > 0 && <> &nbsp;|&nbsp; Palet: <b>{fmtKg(t.peso_palet_kg)}</b></>}
+                  {t.peso_bruto_kg > 0 && <> &nbsp;|&nbsp; Bruto: <b>{fmtKg(t.peso_bruto_kg)}</b></>}
                   {t.largo_cm > 0 && t.ancho_cm > 0 && t.alto_cm > 0 &&
                     <> &nbsp;|&nbsp; Medidas: <b>{t.largo_cm}×{t.ancho_cm}×{t.alto_cm} cm</b></>}
                 </th>
@@ -89,13 +107,13 @@ export default function ListaEmpaque({ datos }) {
               </tr>
             </thead>
             <tbody>
-              {t.productos.length ? t.productos.map((p, i) => (
-                <tr key={p.id_detalle} className={i % 2 === 0 ? 'pk-row-a' : 'pk-row-b'}>
+              {t.productos.length ? unirPorClave(t.productos, 'cantidad_asignada').map((p, i) => (
+                <tr key={p.clave + '-' + i} className={i % 2 === 0 ? 'pk-row-a' : 'pk-row-b'}>
                   <td className="pk-td-clave">{p.clave}</td>
                   <td>{p.descripcion}</td>
                   <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_asignada}</td>
                   <td style={{textAlign:'center',color:'#555'}}>{p.unidad}</td>
-                  <td style={{textAlign:'right',color:'#555',fontSize:11}}>{p.peso_kg > 0 ? `${p.peso_kg} kg` : '-'}</td>
+                  <td style={{textAlign:'right',color:'#555',fontSize:11}}>{fmtKg(p.peso_kg)}</td>
                 </tr>
               )) : (
                 <tr><td colSpan={5} style={{color:'#888',padding:6}}>Sin productos</td></tr>
@@ -105,8 +123,8 @@ export default function ListaEmpaque({ datos }) {
         </div>
       ))}
 
-      {sueltos && sueltos.length > 0 && sueltos.map(p => (
-        <div key={p.id_producto} className="pk-bulto">
+      {sueltos && sueltos.length > 0 && sueltos.map((p, i) => (
+        <div key={p.id_producto ?? i} className="pk-bulto">
           <table className="pk-tabla-bulto">
             <thead>
               <tr className="pk-bulto-head pk-bulto-head-suelto">
@@ -128,14 +146,29 @@ export default function ListaEmpaque({ datos }) {
               <tr className="pk-row-a">
                 <td className="pk-td-clave">{p.clave}</td>
                 <td>{p.descripcion}</td>
-                <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_pendiente ?? p.cantidad_total}</td>
+                <td style={{textAlign:'right',fontWeight:700}}>{p.cantidad_envio ?? p.cantidad_pendiente ?? p.cantidad_total}</td>
                 <td style={{textAlign:'center',color:'#555'}}>{p.unidad}</td>
-                <td style={{textAlign:'right',color:'#555',fontSize:11}}>{p.peso_kg > 0 ? `${p.peso_kg} kg` : '-'}</td>
+                <td style={{textAlign:'right',color:'#555',fontSize:11}}>{fmtKg(p.peso_kg)}</td>
               </tr>
             </tbody>
           </table>
         </div>
       ))}
+
+      {datos.es_parcial && datos.omitidos?.length > 0 && (
+        <div className="pk-omitidos">
+          <b>No incluido en este envio (queda pendiente):</b>
+          <ul>
+            {datos.omitidos.map((o, i) => (
+              <li key={i}>
+                {o.tipo === 'tarima'
+                  ? <>Bulto {o.referencia} ({o.piezas} pzas)</>
+                  : <>{o.referencia} — {o.descripcion}: enviado {o.enviado} de {o.solicitado} (faltan {o.faltante})</>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <table className="pk-tabla-totales">
         <tbody>
@@ -151,15 +184,15 @@ export default function ListaEmpaque({ datos }) {
             </td>
             <td className="pk-total-cell">
               <div className="pk-label">Peso mercancia</div>
-              <div className="pk-total-num-sm">{peso_mercancia_kg > 0 ? `${peso_mercancia_kg} kg` : '-'}</div>
+              <div className="pk-total-num-sm">{fmtKg(peso_mercancia_kg)}</div>
             </td>
             <td className="pk-total-cell">
               <div className="pk-label">Peso pallets</div>
-              <div className="pk-total-num-sm">{peso_palet_total_kg > 0 ? `${peso_palet_total_kg} kg` : '-'}</div>
+              <div className="pk-total-num-sm">{fmtKg(peso_palet_total_kg)}</div>
             </td>
             <td className="pk-total-cell">
               <div className="pk-label">Peso total</div>
-              <div className="pk-total-num-sm">{peso_total_kg > 0 ? `${peso_total_kg} kg` : '-'}</div>
+              <div className="pk-total-num-sm">{fmtKg(peso_total_kg)}</div>
             </td>
           </tr>
         </tbody>

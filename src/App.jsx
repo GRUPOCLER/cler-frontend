@@ -94,7 +94,7 @@ function ModalEntregaParcial({ excluidos, onClose, onConfirmar }) {
       <textarea className="inp" rows={3} placeholder="Ej. Faltante de stock, se completa despues"
         value={motivo} onChange={e => setMotivo(e.target.value)} disabled={enviando} autoFocus />
       {motivo.trim().length > 0 && !valido && (
-        <div style={{fontSize:11,color:'#ef4444',marginTop:6}}>Escribe al menos 5 caracteres</div>
+        <div style={{fontSize:11,color:'var(--danger)',marginTop:6}}>Escribe al menos 5 caracteres</div>
       )}
     </Modal>
   )
@@ -117,7 +117,7 @@ function ModalEliminarEntrega({ numEntrega, onClose, onConfirmar }) {
     <Modal titulo="Eliminar entrega" sub={`Esta a punto de eliminar ${numEntrega} de forma permanente`} onClose={onClose}
       footer={<>
         <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
-        <button className="btn-principal" style={{background:'var(--rojo)',color:'#fff'}}
+        <button className="btn-principal" style={{background:'var(--danger-fill)',borderColor:'var(--danger-fill)',color:'var(--on-danger)'}}
           onClick={confirmar} disabled={!valido || enviando}>
           {enviando ? 'Eliminando...' : 'Eliminar entrega'}
         </button>
@@ -130,7 +130,7 @@ function ModalEliminarEntrega({ numEntrega, onClose, onConfirmar }) {
       <textarea className="inp" rows={3} placeholder="Ej. Entrega duplicada por error al importar el PDF"
         value={motivo} onChange={e => setMotivo(e.target.value)} disabled={enviando} autoFocus />
       {motivo.trim().length > 0 && !valido && (
-        <div style={{fontSize:11,color:'#ef4444',marginTop:6}}>Escribe al menos 5 caracteres</div>
+        <div style={{fontSize:11,color:'var(--danger)',marginTop:6}}>Escribe al menos 5 caracteres</div>
       )}
     </Modal>
   )
@@ -142,7 +142,7 @@ function ModalConfirmar({ titulo, mensaje, textoConfirmar = 'Confirmar', peligro
       footer={<>
         <button className="btn-sec" onClick={onClose}>Cancelar</button>
         <button className={peligro ? 'btn-mini' : 'btn-principal'}
-          style={peligro ? {background:'var(--rojo)',color:'#fff'} : undefined}
+          style={peligro ? {background:'var(--danger-fill)',borderColor:'var(--danger-fill)',color:'var(--on-danger)'} : undefined}
           onClick={onConfirmar}>{textoConfirmar}</button>
       </>}>
       <p style={{fontSize:13,color:'var(--text2)',lineHeight:1.5}}>{mensaje}</p>
@@ -256,6 +256,7 @@ function Login({ onOk }) {
   return (
     <div className="login-wrap">
       <div className="login-card">
+        <span className="cl-logo cl-logo--color cl-logo--grande" aria-hidden="true"></span>
         <div className="login-marca">GRUPO<span>CLER</span></div>
         <div className="login-sub">Sistema operativo de almacen</div>
         <form className="login-form" onSubmit={entrar}>
@@ -1561,26 +1562,123 @@ function VistaEtiquetasSueltas({ toast }) {
   )
 }
 
+// ── MODAL: ARMAR LISTA DE EMPAQUE PARCIAL ─────────────────
+function ModalPackingParcial({ datos, esJefe, onClose, onEnviar }) {
+  const [selT, setSelT] = useState(() => new Set(datos.tarimas.map(t => t.id_tarima)))
+  const [cant, setCant] = useState(() => Object.fromEntries(datos.sueltos.map(s => [s.id_producto, { sel: true, n: s.cantidad_envio }])))
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  const alternarT = id => setSelT(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const setSuelto = (id, cambio) => setCant(prev => ({ ...prev, [id]: { ...prev[id], ...cambio } }))
+
+  const sueltosSel = datos.sueltos
+    .filter(s => cant[s.id_producto]?.sel)
+    .map(s => ({ id_producto: s.id_producto, cantidad: Math.max(0, Math.min(s.cantidad_envio, parseInt(cant[s.id_producto].n, 10) || 0)) }))
+    .filter(s => s.cantidad > 0)
+  const hayAlgo = selT.size + sueltosSel.length > 0
+  const esTodo = selT.size === datos.tarimas.length &&
+    datos.sueltos.every(s => sueltosSel.find(x => x.id_producto === s.id_producto)?.cantidad === s.cantidad_envio)
+  const valido = hayAlgo && !esTodo && motivo.trim().length >= 5
+
+  const enviar = async () => {
+    if (!valido || enviando) return
+    setEnviando(true)
+    try { await onEnviar({ tarimas: [...selT], sueltos: sueltosSel, motivo: motivo.trim() }) }
+    finally { setEnviando(false) }
+  }
+
+  return (
+    <Modal titulo="Lista de empaque parcial"
+      sub="Marca solo lo que realmente salio. Lo demas queda pendiente y se anota en la lista."
+      onClose={onClose}
+      footer={<>
+        <button className="btn-sec" onClick={onClose} disabled={enviando}>Cancelar</button>
+        <button className="btn-principal" onClick={enviar} disabled={!valido || enviando}>
+          {enviando ? 'Enviando...' : esJefe ? 'Generar lista parcial' : 'Solicitar autorizacion'}
+        </button>
+      </>}>
+      <div style={{maxHeight:'44vh',overflowY:'auto',marginBottom:12}}>
+        {datos.tarimas.map(t => (
+          <label key={t.id_tarima} className="parcial-fila">
+            <input type="checkbox" checked={selT.has(t.id_tarima)} onChange={() => alternarT(t.id_tarima)} />
+            <span className="parcial-main">
+              <b>{t.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'} {t.numero_tarima}</b>
+              <span className="parcial-sub">{t.productos.map(p => `${p.clave} x${p.cantidad_asignada}`).join(', ')}</span>
+            </span>
+            <span className="parcial-pzas">{t.total_piezas} pzas</span>
+          </label>
+        ))}
+        {datos.sueltos.map(s => (
+          <div key={s.id_producto} className="parcial-fila">
+            <input type="checkbox" checked={!!cant[s.id_producto]?.sel}
+              onChange={e => setSuelto(s.id_producto, { sel: e.target.checked })} aria-label={`Incluir ${s.clave}`} />
+            <span className="parcial-main">
+              <b>{s.clave}</b>
+              <span className="parcial-sub">{s.descripcion}</span>
+            </span>
+            <span className="parcial-pzas">
+              <input className="inp parcial-num" type="number" min={1} max={s.cantidad_envio}
+                value={cant[s.id_producto]?.n ?? ''} disabled={!cant[s.id_producto]?.sel}
+                onChange={e => setSuelto(s.id_producto, { n: e.target.value })} aria-label={`Cantidad de ${s.clave}`} />
+              <span className="parcial-sub"> de {s.cantidad_envio}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      {!hayAlgo && <div className="parcial-aviso">Selecciona al menos un bulto o producto.</div>}
+      {hayAlgo && esTodo && <div className="parcial-aviso">Marcaste todo el traslado: usa la lista de empaque normal.</div>}
+      <label className="dim-label">Motivo de la lista parcial</label>
+      <textarea className="inp" rows={2} style={{resize:'vertical'}} value={motivo}
+        placeholder="Ej. El cliente recogio solo una parte; el resto sale el lunes"
+        onChange={e => setMotivo(e.target.value)} disabled={enviando} />
+      {!esJefe && (
+        <div className="parcial-sub" style={{marginTop:8}}>
+          Un Gerente debe autorizar esta lista antes de imprimirla.
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+const ESTATUS_PARCIAL = { pendiente: 'Pendiente de autorizar', aprobada: 'Autorizada', usada: 'Impresa', rechazada: 'Rechazada' }
+
 // ── VISTA DE LISTA DE EMPAQUE (imprimible) ────────────────
 function VistaPacking({ toast }) {
-  const { id: idEntrega } = useParams()
+  const { id: idEntrega, sid } = useParams()
   const navigate = useNavigate()
   const volver = () => navigate(`/entregas/${idEntrega}`)
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null)
+  const [modalParcial, setModalParcial] = useState(false)
+  const [parciales, setParciales] = useState([])
+  const miRol = api.getUser()?.rol
+  const esJefe = miRol === 'admin' || miRol === 'gerente'
+  const esParcial = !!sid
+
+  const cargarParciales = () => {
+    if (esParcial) return
+    api.listarPackingParciales(idEntrega).then(setParciales).catch(() => setParciales([]))
+  }
 
   useEffect(() => {
-    api.obtenerPacking(idEntrega).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
-  }, [idEntrega])
+    setDatos(null)
+    const carga = esParcial ? api.obtenerPackingParcial(idEntrega, sid) : api.obtenerPacking(idEntrega)
+    carga.then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+    cargarParciales()
+  }, [idEntrega, sid])
 
   if (!datos) return <div className="cargando">Generando lista de empaque...</div>
 
-  const yaImpresa = (datos.entrega?.packing_impreso_veces || 0) > 0
+  const yaImpresa = esParcial ? datos.parcial?.estatus === 'usada' : (datos.entrega?.packing_impreso_veces || 0) > 0
 
   const imprimir = async () => {
-    try { await api.marcarImpresoPacking(idEntrega, null); window.print() }
-    catch (e) {
-      if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
+    try {
+      if (esParcial) await api.marcarImpresoPackingParcial(idEntrega, sid)
+      else await api.marcarImpresoPacking(idEntrega, null)
+      window.print()
+    } catch (e) {
+      if (!esParcial && /motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
       else toast(e.message, 'error')
     }
   }
@@ -1597,18 +1695,58 @@ function VistaPacking({ toast }) {
     }
   }
 
+  const enviarParcial = async (body) => {
+    try {
+      const r = await api.solicitarPackingParcial(idEntrega, body)
+      setModalParcial(false)
+      if (r.estatus === 'aprobada') {
+        toast('Lista parcial generada', 'ok')
+        navigate(`/entregas/${idEntrega}/packing/parcial/${r.id}`)
+      } else {
+        toast('Solicitud enviada. Un Gerente debe autorizar la lista parcial.', 'ok')
+        cargarParciales()
+      }
+    } catch (e) { toast(e.message, 'error') }
+  }
+
   return (
     <div>
       <div className="contenedor" style={{marginBottom: 12}}>
         <div className="acciones" style={{marginLeft: 0}}>
           <button className="btn-sec" onClick={volver}>Volver</button>
+          {esParcial && <button className="btn-sec" onClick={() => navigate(`/entregas/${idEntrega}/packing`)}>Ver lista completa</button>}
+          {!esParcial && <button className="btn-sec" onClick={() => setModalParcial(true)}>Lista parcial</button>}
           <button className="btn-principal" onClick={imprimir}>{yaImpresa ? 'Reimprimir' : 'Imprimir'}</button>
         </div>
+        {!esParcial && parciales.length > 0 && (
+          <div className="parcial-lista">
+            <div className="dim-label">Listas parciales de esta entrega</div>
+            {parciales.map(p => (
+              <div key={p.id} className="parcial-fila">
+                <span className="parcial-main">
+                  <b>{ESTATUS_PARCIAL[p.estatus] || p.estatus}</b>
+                  <span className="parcial-sub">{p.resumen} — {p.solicitado_por}: {p.motivo}</span>
+                  {p.estatus === 'rechazada' && p.comentario_resolucion &&
+                    <span className="parcial-sub">Motivo del rechazo: {p.comentario_resolucion}</span>}
+                </span>
+                {(p.estatus === 'aprobada' || p.estatus === 'usada') && (
+                  <button className="btn-mini" onClick={() => navigate(`/entregas/${idEntrega}/packing/parcial/${p.id}`)}>
+                    {p.estatus === 'usada' && !esJefe ? 'Ver' : 'Abrir'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <ListaEmpaque datos={datos} />
       {modalMotivo && (
         <ModalMotivoImpresion mensaje={modalMotivo.mensaje}
           onClose={() => setModalMotivo(null)} onConfirmar={confirmarMotivo} />
+      )}
+      {modalParcial && (
+        <ModalPackingParcial datos={datos} esJefe={esJefe}
+          onClose={() => setModalParcial(false)} onEnviar={enviarParcial} />
       )}
     </div>
   )
@@ -1627,7 +1765,7 @@ function Migaja() {
     partes.push(seg[1])
     if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
     if (seg[2] === 'etiquetas-sueltas') partes.push('Etiquetas sueltas')
-    if (seg[2] === 'packing') partes.push('Lista de empaque')
+    if (seg[2] === 'packing') partes.push(seg[3] === 'parcial' ? 'Lista de empaque parcial' : 'Lista de empaque')
   }
 
   return (
@@ -1741,7 +1879,7 @@ export default function App() {
       <Migaja />
       {!enVistaEtiqueta && (
         <div className="topbar">
-          <button className="topbar-marca" onClick={() => navigate('/')} title="Ir al inicio">GRUPO<span>CLER</span></button>
+          <button className="topbar-marca" onClick={() => navigate('/')} title="Ir al inicio"><span className="cl-logo" aria-hidden="true"></span><span>GRUPO CLER</span></button>
           <nav className="topbar-nav">
             <button className={'nav-btn' + (location.pathname === '/' ? ' activo' : '')}
               onClick={() => navigate('/')}>Inicio</button>
@@ -1780,6 +1918,7 @@ export default function App() {
           <Route path="/entregas/:id/etiquetas/:idTarima" element={<VistaEtiquetas toast={toast} />} />
           <Route path="/entregas/:id/etiquetas-sueltas" element={<VistaEtiquetasSueltas toast={toast} />} />
           <Route path="/entregas/:id/packing" element={<VistaPacking toast={toast} />} />
+          <Route path="/entregas/:id/packing/parcial/:sid" element={<VistaPacking toast={toast} />} />
           <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
           <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />

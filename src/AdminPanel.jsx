@@ -104,6 +104,7 @@ function PanelAlmacenes({ toast }) {
   const [resultados, setResultados] = useState(null)
   const [buscando, setBuscando] = useState(false)
   const [tipoNuevo, setTipoNuevo] = useState('destino') // que tipo de vigilancia agregar
+  const [porQuitar, setPorQuitar] = useState(null)  // almacen pendiente de confirmar
 
   const cargarConfigurados = () => api.listarAlmacenesConfigurados().then(setConfigurados).catch(e => toast(e.message, 'error'))
 
@@ -132,8 +133,10 @@ function PanelAlmacenes({ toast }) {
     catch (e) { toast(e.message, 'error') }
   }
 
-  const quitar = async (a) => {
-    if (!confirm(`¿Quitar "${a.nombre}" de los almacenes vigilados?`)) return
+  const quitar = (a) => setPorQuitar(a)
+  const confirmarQuitar = async () => {
+    const a = porQuitar
+    setPorQuitar(null)
     try { await api.quitarAlmacen(a.id); toast('Almacen quitado', 'ok'); cargarConfigurados() }
     catch (e) { toast(e.message, 'error') }
   }
@@ -142,6 +145,18 @@ function PanelAlmacenes({ toast }) {
 
   return (
     <>
+      {porQuitar && (
+        <Modal titulo="Quitar almacen" onClose={() => setPorQuitar(null)}
+          footer={<>
+            <button className="btn-sec" onClick={() => setPorQuitar(null)}>Cancelar</button>
+            <button className="btn-principal" style={{background:'var(--danger-fill)',borderColor:'var(--danger-fill)',color:'var(--on-danger)'}}
+              onClick={confirmarQuitar}>Quitar almacen</button>
+          </>}>
+          <p style={{fontSize:13,color:'var(--text2)',lineHeight:1.5}}>
+            Se dejara de vigilar "{porQuitar.nombre}". Puedes volver a agregarlo despues.
+          </p>
+        </Modal>
+      )}
       <div className="panel">
         <div className="panel-titulo">
           Almacenes vigilados<span className="chip chip-ok">{configurados ? configurados.length : '…'}</span>

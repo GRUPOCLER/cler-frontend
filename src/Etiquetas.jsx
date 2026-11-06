@@ -3,6 +3,7 @@
 //  Replica el diseno del sistema Apps Script original
 // ============================================================
 import { useEffect } from 'react'
+import { fmtKg, unirPorClave } from './formato'
 
 function usarTamanoPagina(reglaCss) {
   useEffect(() => {
@@ -71,15 +72,15 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
         <div className="et-pesos" style={{ gridTemplateColumns: tieneDims ? 'repeat(4,1fr)' : 'repeat(3,1fr)' }}>
           <div className="et-peso-box">
             <div className="et-peso-lbl">Neto</div>
-            <div className="et-peso-val">{d.peso_neto_kg > 0 ? `${d.peso_neto_kg} kg` : '-'}</div>
+            <div className="et-peso-val">{fmtKg(d.peso_neto_kg)}</div>
           </div>
           <div className="et-peso-box">
             <div className="et-peso-lbl">Palet</div>
-            <div className="et-peso-val">{d.peso_palet_kg > 0 ? `${d.peso_palet_kg} kg` : '-'}</div>
+            <div className="et-peso-val">{fmtKg(d.peso_palet_kg)}</div>
           </div>
           <div className="et-peso-box" style={{ borderRight: tieneDims ? '1px solid #000' : 'none' }}>
             <div className="et-peso-lbl">Bruto</div>
-            <div className="et-peso-val">{d.peso_bruto_kg > 0 ? `${d.peso_bruto_kg} kg` : '-'}</div>
+            <div className="et-peso-val">{fmtKg(d.peso_bruto_kg)}</div>
           </div>
           {tieneDims && (
             <div className="et-peso-box" style={{ borderRight: 'none' }}>
@@ -103,8 +104,8 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
             </tr>
           </thead>
           <tbody>
-            {chunkProds.length ? chunkProds.map(p => (
-              <tr key={p.id_producto}>
+            {chunkProds.length ? chunkProds.map((p, i) => (
+              <tr key={p.clave + '-' + i}>
                 <td className="et-td-clave">{p.clave}</td>
                 <td className="et-td-desc">{p.descripcion}</td>
                 <td className="et-td-cant">{p.cantidad_total}</td>
@@ -138,7 +139,7 @@ export default function Etiquetas({ datos }) {
   // datos: array de objetos etiqueta (uno o varias tarimas)
   const paginas = []
   datos.forEach(d => {
-    const grupos = chunk(d.productos || [], MAX_PRODS_POR_PAGINA)
+    const grupos = chunk(unirPorClave(d.productos, 'cantidad_total'), MAX_PRODS_POR_PAGINA)
     grupos.forEach((g, i) => {
       paginas.push(
         <PaginaEtiqueta
