@@ -3,6 +3,7 @@
 // ============================================================
 import { useEffect } from 'react'
 import { fmtKg, unirPorClave } from './formato'
+import { textoSello } from './sello'
 
 function usarTamanoPagina(reglaCss) {
   useEffect(() => {
@@ -21,6 +22,10 @@ export default function ListaEmpaque({ datos }) {
   const folios = es_fusion ? entregas_involucradas.map(e => e.num_entrega).filter(Boolean).join(' + ') : entrega.num_entrega
   const ovs    = es_fusion ? entregas_involucradas.map(e => e.orden).filter(Boolean).join(' + ') : (entrega.orden || '-')
   const fecha  = new Date().toLocaleDateString('es-MX')
+  const imp = datos.es_parcial
+    ? (() => { const l = datos.parcial?.impresiones || []; return { veces: l.length, ultima: l[l.length - 1]?.en, por: l[l.length - 1]?.por, primera: l[0]?.en } })()
+    : { veces: entrega.packing_impreso_veces, ultima: entrega.packing_ultima_en, por: entrega.packing_ultima_por, primera: entrega.packing_primera_en }
+  const sello = textoSello(imp)
 
   return (
     <div className="pk-doc">
@@ -36,6 +41,7 @@ export default function ListaEmpaque({ datos }) {
         </div>
       )}
 
+      {sello && <div className={'pk-sello' + (imp.veces > 1 ? ' pk-sello-re' : '')}>{sello}</div>}
       <table className="pk-tabla-head">
         <tbody>
           <tr>

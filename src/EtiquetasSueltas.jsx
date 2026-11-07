@@ -4,6 +4,7 @@
 // ============================================================
 import { useEffect } from 'react'
 import { fmtKg } from './formato'
+import { textoSello } from './sello'
 
 // Le dice al navegador que el tamano de pagina de impresion ES 4x2in,
 // para que no encoja el contenido al asumir tamano Carta por defecto.
@@ -18,7 +19,7 @@ function usarTamanoPagina(reglaCss) {
 
 function PaginaEtiquetaSuelta({ d }) {
   return (
-    <div className="et-suelta-pagina">
+    <div className={'et-suelta-pagina' + (d.impresa_veces > 0 ? ' con-sello' : '')}>
       <div className="et-suelta-top">
         <div className="et-suelta-clave">{d.clave}</div>
         <div className="et-suelta-bulto-wrap">
@@ -50,6 +51,10 @@ function PaginaEtiquetaSuelta({ d }) {
           <div className="et-suelta-bc-txt">{d.barcode_entrega || d.num_entrega}</div>
         </div>
       </div>
+      {(() => {
+        const t = textoSello({ veces: d.impresa_veces, ultima: d.ultima_impresion_en, por: d.ultima_impresion_por, primera: d.primera_impresion_en })
+        return t ? <div className={'et-suelta-sello' + (d.impresa_veces > 1 ? ' et-sello-re' : '')}>{t}</div> : null
+      })()}
     </div>
   )
 }

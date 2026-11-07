@@ -4,6 +4,7 @@
 // ============================================================
 import { useEffect } from 'react'
 import { fmtKg, unirPorClave } from './formato'
+import { textoSello } from './sello'
 
 function usarTamanoPagina(reglaCss) {
   useEffect(() => {
@@ -129,6 +130,10 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
           {d.barcode_tarima_url && <img src={d.barcode_tarima_url} className="et-bc-img" alt="bc-tarima" />}
           <div className="et-bc-txt">{d.barcode_tarima || d.id_tarima || '-'}</div>
         </div>
+        {(() => {
+          const t = textoSello({ veces: d.impresa_veces, ultima: d.ultima_impresion_en, por: d.ultima_impresion_por, primera: d.primera_impresion_en })
+          return t ? <div className={'et-sello' + (d.impresa_veces > 1 ? ' et-sello-re' : '')}>{t}</div> : null
+        })()}
       </div>
     </div>
   )

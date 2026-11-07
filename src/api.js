@@ -129,6 +129,17 @@ export const marcarImpresaSueltas = (idEntrega, motivo = null) =>
     method: 'POST', body: JSON.stringify({ motivo })
   })
 
+// ── ANALISIS (reporteria, solo lectura) ──
+export const obtenerAnalisis = ({ desde, hasta, empresa, sistema }) => {
+  const q = new URLSearchParams()
+  if (desde) q.set('desde', desde)
+  if (hasta) q.set('hasta', hasta)
+  if (empresa) q.set('empresa', empresa)
+  if (sistema) q.set('sistema', sistema)
+  return req(`/api/analisis/resumen?${q.toString()}`)
+}
+export const obtenerAnalisisOdoo = () => req('/api/analisis/odoo')
+
 // ── LISTA DE EMPAQUE PARCIAL (requiere autorizacion de un Gerente) ──
 export const solicitarPackingParcial = (idEntrega, body) =>
   req(`/api/entregas/${idEntrega}/packing/parcial/solicitar`, { method: 'POST', body: JSON.stringify(body) })

@@ -6,6 +6,7 @@ import EtiquetasSueltas from './EtiquetasSueltas.jsx'
 import ListaEmpaque from './ListaEmpaque.jsx'
 import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
+import Analisis from './Analisis.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -1442,19 +1443,23 @@ function VistaEtiquetas({ toast }) {
   const [datos, setDatos] = useState(null)
   const [modalMotivo, setModalMotivo] = useState(null) // { fnMarcar, mensaje } | null
 
-  useEffect(() => {
-    const carga = idTarima
+  const cargar = () => (idTarima
       ? api.obtenerEtiqueta(idEntrega, idTarima).then(d => [d])
-      : api.obtenerTodasEtiquetas(idEntrega)
-    carga.then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+      : api.obtenerTodasEtiquetas(idEntrega)).then(setDatos)
+  useEffect(() => {
+    cargar().catch(e => { toast(e.message, 'error'); volver() })
   }, [idEntrega, idTarima])
+
+  // Tras registrar la impresion se recarga para que la hoja lleve el sello
+  // (original / reimpresion, fecha y usuario) y recien entonces se imprime.
+  const imprimirConSello = async () => { await cargar(); setTimeout(() => window.print(), 150) }
 
   const fnMarcar = (motivo) => idTarima
     ? api.marcarImpresaTarima(idEntrega, idTarima, motivo)
     : api.marcarImpresaLote(idEntrega, datos.map(d => d.id_tarima), motivo)
 
   const imprimir = async () => {
-    try { await fnMarcar(null); window.print() }
+    try { await fnMarcar(null); await imprimirConSello() }
     catch (e) {
       if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
       else toast(e.message, 'error')
@@ -1465,7 +1470,7 @@ function VistaEtiquetas({ toast }) {
     try {
       await fnMarcar(motivo)
       setModalMotivo(null)
-      window.print()
+      await imprimirConSello()
     } catch (e2) {
       setModalMotivo(null)
       if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
@@ -1513,16 +1518,18 @@ function VistaEtiquetasSueltas({ toast }) {
     try { localStorage.setItem('cler_formato_sueltas', f) } catch {}
   }
 
+  const cargar = () => api.obtenerEtiquetasSueltas(idEntrega, skusMaster, idsSolo, motivoParcial).then(setDatos)
   useEffect(() => {
-    api.obtenerEtiquetasSueltas(idEntrega, skusMaster, idsSolo, motivoParcial).then(setDatos).catch(e => { toast(e.message, 'error'); volver() })
+    cargar().catch(e => { toast(e.message, 'error'); volver() })
   }, [idEntrega])
+  const imprimirConSello = async () => { await cargar(); setTimeout(() => window.print(), 150) }
 
   if (!datos) return <div className="cargando">Generando etiquetas...</div>
 
   const yaImpresa = datos.some(d => (d.impresa_veces || 0) > 0)
 
   const imprimir = async () => {
-    try { await api.marcarImpresaSueltas(idEntrega, null); window.print() }
+    try { await api.marcarImpresaSueltas(idEntrega, null); await imprimirConSello() }
     catch (e) {
       if (/motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
       else toast(e.message, 'error')
@@ -1533,7 +1540,7 @@ function VistaEtiquetasSueltas({ toast }) {
     try {
       await api.marcarImpresaSueltas(idEntrega, motivo)
       setModalMotivo(null)
-      window.print()
+      await imprimirConSello()
     } catch (e2) {
       setModalMotivo(null)
       if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
@@ -1668,6 +1675,12 @@ function VistaPacking({ toast }) {
     cargarParciales()
   }, [idEntrega, sid])
 
+  const imprimirConSello = async () => {
+    const d = await (esParcial ? api.obtenerPackingParcial(idEntrega, sid) : api.obtenerPacking(idEntrega))
+    setDatos(d)
+    setTimeout(() => window.print(), 150)
+  }
+
   if (!datos) return <div className="cargando">Generando lista de empaque...</div>
 
   const yaImpresa = esParcial ? datos.parcial?.estatus === 'usada' : (datos.entrega?.packing_impreso_veces || 0) > 0
@@ -1676,7 +1689,7 @@ function VistaPacking({ toast }) {
     try {
       if (esParcial) await api.marcarImpresoPackingParcial(idEntrega, sid)
       else await api.marcarImpresoPacking(idEntrega, null)
-      window.print()
+      await imprimirConSello()
     } catch (e) {
       if (!esParcial && /motivo/i.test(e.message)) setModalMotivo({ mensaje: e.message })
       else toast(e.message, 'error')
@@ -1687,7 +1700,7 @@ function VistaPacking({ toast }) {
     try {
       await api.marcarImpresoPacking(idEntrega, motivo)
       setModalMotivo(null)
-      window.print()
+      await imprimirConSello()
     } catch (e2) {
       setModalMotivo(null)
       if (/[Ss]olicitud enviada/.test(e2.message)) toast('Solicitud de reimpresion enviada. Espera la autorizacion de un Gerente.', 'ok')
@@ -1886,6 +1899,10 @@ export default function App() {
             <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
               onClick={() => navigate('/nueva')}>Nueva entrega</button>
             {(user?.rol === 'admin' || user?.rol === 'gerente') && (
+              <button className={'nav-btn' + (location.pathname === '/analisis' ? ' activo' : '')}
+                onClick={() => navigate('/analisis')}>Análisis</button>
+            )}
+            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
               <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
                 onClick={() => navigate('/reimpresiones')}>
                 Autorizaciones
@@ -1921,6 +1938,7 @@ export default function App() {
           <Route path="/entregas/:id/packing/parcial/:sid" element={<VistaPacking toast={toast} />} />
           <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
           <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
+          <Route path="/analisis" element={(user?.rol === 'admin' || user?.rol === 'gerente') ? <Analisis toast={toast} /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
