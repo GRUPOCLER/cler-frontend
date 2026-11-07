@@ -6,7 +6,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as api from './api'
-import { nf, fechaCorta, TarjetaGrafica, Kpi, Columnas, Ranking, ApiladaDuo, Medidor, MapaCalor, Segmentada, Estado } from './graficas'
+import { nf, fechaCorta, TarjetaGrafica, Kpi, Columnas, Ranking, ApiladaDuo, Medidor, MapaCalor, Segmentada, Sankey, Estado } from './graficas'
 
 const hoyMX = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date())
 const sumaDias = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
@@ -145,6 +145,40 @@ const Titular = ({ children, sub }) => (
   <div className="an-titular"><h2>{children}</h2>{sub && <p>{sub}</p>}</div>
 )
 
+
+// ── Sankey de volumen por cliente (empresa -> tipo de entrega -> cliente) ──
+const METRICAS = [{ id: 'piezas', t: 'Piezas', u: 'piezas' }, { id: 'kg', t: 'Kilos', u: 'kg' }, { id: 'bultos', t: 'Bultos', u: 'bultos' }]
+function SankeyClientes({ d }) {
+  const [metrica, setMetrica] = useState('piezas')
+  const [topN, setTopN] = useState(8)
+  const m = METRICAS.find(x => x.id === metrica)
+  const flujo = d.flujo || []
+  const porCli = {}
+  flujo.forEach(f => { porCli[f.cliente] = (porCli[f.cliente] || 0) + (f[metrica] || 0) })
+  const orden = Object.entries(porCli).sort((a, b) => b[1] - a[1])
+  const total = orden.reduce((a, x) => a + x[1], 0)
+  const top3 = orden.slice(0, 3).reduce((a, x) => a + x[1], 0)
+  const titulo = total && orden.length > 3
+    ? `3 clientes concentran ${nf(pct(top3, total))}% de ${m.u === 'kg' ? 'los kilos' : 'las ' + m.u}: ${orden.slice(0, 3).map(x => x[0]).join(', ')}`
+    : 'De dónde viene y a quién llega el volumen'
+  const filas = [...flujo].sort((a, b) => (b[metrica] || 0) - (a[metrica] || 0)).map(f => [f.empresa, ({ TAR: 'Tarima', CS: 'Carga suelta', MIX: 'Mixta' })[f.sistema] || f.sistema, f.cliente, nf(f.piezas), nf(f.kg), nf(f.bultos)])
+  return (
+    <TarjetaGrafica ancho="3" titulo={titulo}
+      sub={`Cómo fluye el volumen de cada empresa, por tipo de entrega, hasta el cliente. Se muestran los ${topN} clientes con más ${m.u}; el resto se agrupa.`}
+      tabla={{ cols: ['Empresa', 'Tipo de entrega', 'Cliente', 'Piezas', 'Kg', 'Bultos'], filas }}>
+      <div className="an-sankey-ctl">
+        <div className="an-preset" role="group" aria-label="Medir en">
+          {METRICAS.map(x => <button key={x.id} className={'an-chip' + (metrica === x.id ? ' on' : '')} onClick={() => setMetrica(x.id)}>{x.t}</button>)}
+        </div>
+        <div className="an-preset" role="group" aria-label="Clientes a mostrar">
+          {[5, 8, 12].map(n => <button key={n} className={'an-chip' + (topN === n ? ' on' : '')} onClick={() => setTopN(n)}>Top {n}</button>)}
+        </div>
+      </div>
+      <Sankey flujo={flujo} metrica={metrica} topN={topN} unidad={m.u} />
+    </TarjetaGrafica>
+  )
+}
+
 // ───────────────────────── DIRECCION GENERAL ─────────────────────────
 function VistaDireccion({ d, odoo, recargarOdoo }) {
   const k = d.kpis, dias = d.periodo.dias
@@ -178,6 +212,8 @@ function VistaDireccion({ d, odoo, recargarOdoo }) {
           tabla={{ cols: ['Fecha', 'Piezas', 'Entregas'], filas: serie.map(s => [fechaLarga(s.fecha), nf(s.piezas), nf(s.entregas)]) }}>
           <Columnas datos={serie.map(s => ({ etq: fechaCorta(s.fecha), valor: s.piezas, extra: `${nf(s.entregas)} entregas` }))} resaltar={[pico]} media={m7} unidad="piezas" />
         </TarjetaGrafica>
+
+        <SankeyClientes d={d} />
 
         <TarjetaGrafica titulo={topEmp ? `${topEmp.nombre} concentra ${nf(pct(topEmp.piezas, totalPz))}% de las piezas` : 'Piezas por empresa'}
           sub="Piezas por empresa que genera la entrega."

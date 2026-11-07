@@ -4,7 +4,7 @@
 //  texto siempre en tinta (nunca del color de la serie), tooltip al pasar el cursor,
 //  y toda tarjeta puede verse como tabla.
 // ============================================================
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 export const nf = (n, dec = 0) =>
   (Number(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: dec, maximumFractionDigits: dec })
@@ -237,4 +237,95 @@ export function Estado({ cargando, error, vacio, reintentar, children }) {
   if (error) return <div className="an-estado an-estado--error">{error} {reintentar && <button className="btn-mini" onClick={reintentar}>Reintentar</button>}</div>
   if (vacio) return <div className="an-estado">No hay datos en este periodo. Amplía el rango de fechas o quita los filtros.</div>
   return children
+}
+
+// ── Sankey: empresa -> tipo de entrega -> cliente (un solo tono; el cursor resalta el recorrido) ──
+//  flujo: [{ empresa, sistema, cliente, piezas, kg, bultos, entregas }]  metrica: 'piezas' | 'kg' | 'bultos'
+//  topN: clientes que se muestran; el resto se agrupa en "Otros clientes"
+const SIS_TXT = { TAR: 'Tarima', CS: 'Carga suelta', MIX: 'Mixta' }
+export function armarSankey(flujo, metrica, topN) {
+  const porCli = {}
+  flujo.forEach(f => { porCli[f.cliente] = (porCli[f.cliente] || 0) + (f[metrica] || 0) })
+  const orden = Object.entries(porCli).sort((a, b) => b[1] - a[1]).map(x => x[0])
+  const visibles = new Set(orden.slice(0, topN))
+  const agr = {}
+  flujo.forEach(f => {
+    const cli = visibles.has(f.cliente) ? f.cliente : 'Otros clientes'
+    const sis = SIS_TXT[f.sistema] || f.sistema
+    const v = f[metrica] || 0
+    if (v <= 0) return
+    const k1 = f.empresa + '|' + sis, k2 = sis + '|' + cli
+    agr['a' + k1] = agr['a' + k1] || { de: 'e:' + f.empresa, a: 's:' + sis, v: 0 }; agr['a' + k1].v += v
+    agr['b' + k2] = agr['b' + k2] || { de: 's:' + sis, a: 'c:' + cli, v: 0 }; agr['b' + k2].v += v
+  })
+  const enlaces = Object.values(agr)
+  const nodos = {}
+  enlaces.forEach(l => {
+    ;[l.de, l.a].forEach(id => { nodos[id] = nodos[id] || { id, col: id[0] === 'e' ? 0 : id[0] === 's' ? 1 : 2, nombre: id.slice(2), ent: 0, sal: 0 } })
+    nodos[l.de].sal += l.v; nodos[l.a].ent += l.v
+  })
+  const lista = Object.values(nodos)
+  lista.forEach(n => { n.valor = Math.max(n.ent, n.sal) })
+  const total = lista.filter(n => n.col === 0).reduce((a, n) => a + n.valor, 0)
+  return { enlaces, nodos: lista, total }
+}
+
+export function Sankey({ flujo, metrica = 'piezas', topN = 8, unidad = 'piezas', formato = nf }) {
+  const [sel, setSel] = useState(null)   // { tipo: 'nodo'|'enlace', id }
+  const g = useMemo(() => armarSankey(flujo, metrica, topN), [flujo, metrica, topN])
+  if (!g.total) return <div className="an-estado">Sin movimiento en el periodo.</div>
+  const W = 760, mI = 118, mD = 190, GAP = 8, T = 18
+  const cols = [0, 1, 2].map(c => g.nodos.filter(n => n.col === c).sort((a, b) => (a.nombre === 'Otros clientes') - (b.nombre === 'Otros clientes') || b.valor - a.valor))
+  const H = Math.max(280, cols[2].length * 30 + 20)
+  const esc = Math.min(...cols.map(c => (H - T * 0 - GAP * (c.length - 1)) / (c.reduce((a, n) => a + n.valor, 0) || 1)))
+  const xs = [mI, (W - mD + mI) / 2 - 7, W - mD - 14]
+  cols.forEach((c, ci) => {
+    const usado = c.reduce((a, n) => a + n.valor * esc, 0) + GAP * (c.length - 1)
+    let y = (H - usado) / 2
+    c.forEach(n => { n.x = xs[ci]; n.y = y; n.h = Math.max(2, n.valor * esc); y += n.h + GAP })
+  })
+  const porId = Object.fromEntries(g.nodos.map(n => [n.id, n]))
+  // posicion de cada enlace dentro de su nodo (ordenado por destino / origen para evitar cruces)
+  const enl = g.enlaces.map((l, i) => ({ ...l, i }))
+  g.nodos.forEach(n => {
+    let yo = n.y; enl.filter(l => l.de === n.id).sort((a, b) => porId[a.a].y - porId[b.a].y).forEach(l => { l.y0 = yo + (l.v * esc) / 2; yo += l.v * esc })
+    let yi = n.y; enl.filter(l => l.a === n.id).sort((a, b) => porId[a.de].y - porId[b.de].y).forEach(l => { l.y1 = yi + (l.v * esc) / 2; yi += l.v * esc })
+  })
+  const activoEnl = (l) => !sel || (sel.tipo === 'enlace' ? sel.id === l.i : (l.de === sel.id || l.a === sel.id || (sel.vecinos && sel.vecinos.has(l.i))))
+  const elegirNodo = (n) => {
+    // incluye el recorrido completo: enlaces aguas arriba y aguas abajo del nodo
+    const vec = new Set(); const adelante = (id) => enl.filter(l => l.de === id).forEach(l => { vec.add(l.i); adelante(l.a) }); const atras = (id) => enl.filter(l => l.a === id).forEach(l => { vec.add(l.i); atras(l.de) })
+    adelante(n.id); atras(n.id); setSel({ tipo: 'nodo', id: n.id, vecinos: vec })
+  }
+  const nodoActivo = (n) => !sel || (sel.tipo === 'nodo' ? (sel.id === n.id || enl.some(l => sel.vecinos.has(l.i) && (l.de === n.id || l.a === n.id))) : enl.some(l => l.i === sel.id && (l.de === n.id || l.a === n.id)))
+  const pct = (v) => nf((100 * v) / g.total, 1)
+  const cortar = (s, n = 26) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
+  const tip = sel && (sel.tipo === 'enlace'
+    ? (() => { const l = enl[sel.id]; return `${porId[l.de].nombre} → ${porId[l.a].nombre}: ${formato(l.v)} ${unidad} (${pct(l.v)}%)` })()
+    : (() => { const n = porId[sel.id]; return `${n.nombre}: ${formato(n.valor)} ${unidad} (${pct(n.valor)}% del total)` })())
+  return (
+    <div className="an-sankey" onMouseLeave={() => setSel(null)}>
+      <div className="an-sankey-scroll">
+        <svg viewBox={`0 -18 ${W} ${H + 28}`} role="img" aria-label={`Flujo de ${unidad} de empresa a tipo de entrega a cliente`}>
+          {['Empresa', 'Tipo de entrega', 'Cliente'].map((t, i) => <text key={t} className="an-txt an-sankey-col" x={i === 0 ? mI : i === 1 ? xs[1] + T / 2 : xs[2]} y={-6} textAnchor={i === 1 ? 'middle' : i === 0 ? 'end' : 'start'} dx={i === 0 ? T : 0}>{t}</text>)}
+          {enl.map(l => {
+            const a = porId[l.de], b = porId[l.a], x0 = a.x + T, x1 = b.x, xm = (x0 + x1) / 2
+            return <path key={l.i} className="an-sankey-enlace" d={`M${x0},${l.y0} C${xm},${l.y0} ${xm},${l.y1} ${x1},${l.y1}`}
+              strokeWidth={Math.max(1, l.v * esc)} style={{ opacity: activoEnl(l) ? (sel ? 0.65 : 0.32) : 0.07, stroke: sel && activoEnl(l) ? 'var(--chart-2)' : 'var(--chart-1)' }}
+              onMouseEnter={() => setSel({ tipo: 'enlace', id: l.i })}><title>{`${a.nombre} → ${b.nombre}: ${formato(l.v)} ${unidad}`}</title></path>
+          })}
+          {g.nodos.map(n => (
+            <g key={n.id} className="an-sankey-nodo" tabIndex={0} onMouseEnter={() => elegirNodo(n)} onFocus={() => elegirNodo(n)} onBlur={() => setSel(null)}
+              style={{ opacity: nodoActivo(n) ? 1 : 0.35 }} aria-label={`${n.nombre}: ${formato(n.valor)} ${unidad}`}>
+              <rect x={n.x} y={n.y} width={T} height={n.h} rx="2" fill={n.col === 2 && n.nombre === 'Otros clientes' ? 'var(--border-strong)' : 'var(--chart-1)'} />
+              <text className="an-txt an-sankey-lbl" x={n.col === 0 ? n.x - 6 : n.x + T + 6} y={n.y + n.h / 2} dy="0.35em" textAnchor={n.col === 0 ? 'end' : 'start'}>
+                {cortar(n.nombre)}{n.col !== 1 ? <tspan className="an-sankey-val"> {formato(n.valor)}</tspan> : null}
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
+      <div className="an-calor-pie">{tip ? <b>{tip}</b> : <span>Pasa el cursor sobre un nodo o un flujo para ver su recorrido. El ancho es proporcional a las {unidad}.</span>}</div>
+    </div>
+  )
 }
