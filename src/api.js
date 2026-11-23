@@ -234,6 +234,7 @@ export const odooCargarEntrega = (pickingIds) =>
 
 // ── TRASPASOS INTERNOS (CEDIS, FULL MELI, Eventos y Expo) ──
 export const odooListarTraspasos = () => req('/api/odoo/traspasos')
+export const odooCompatibilidad = () => req('/api/odoo/diag/compatibilidad')
 
 export const odooCargarTraspaso = (pickingId) =>
   req('/api/odoo/traspaso?picking_id=' + pickingId, { method: 'POST' })

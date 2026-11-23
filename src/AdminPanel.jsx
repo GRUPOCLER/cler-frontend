@@ -97,6 +97,38 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
   )
 }
 
+// ── COMPATIBILIDAD CON ODOO (tras actualizar de version) ──
+function PanelCompatibilidadOdoo() {
+  const [r, setR] = useState(null)
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState(null)
+  const revisar = async () => {
+    setCargando(true); setError(null)
+    try { setR(await api.odooCompatibilidad()) } catch (e) { setError(e.message) } finally { setCargando(false) }
+  }
+  return (
+    <div className="panel">
+      <div className="panel-titulo">Compatibilidad con Odoo
+        {r && <span className={'chip ' + (r.ok ? 'chip-ok' : 'chip-warn')}>{r.ok ? 'Todo en orden' : 'Revisar'}</span>}</div>
+      <p style={{fontSize:12,color:'var(--text2)',margin:'0 0 10px'}}>Revisa contra el Odoo conectado que existan los modelos y campos que usa el sistema y que las consultas respondan. Úsalo después de una actualización de Odoo.</p>
+      <button className="btn-principal" disabled={cargando} onClick={revisar}>{cargando ? 'Revisando...' : 'Revisar compatibilidad'}</button>
+      {error && <div className="error" style={{marginTop:10}}>{error}</div>}
+      {r && (
+        <div style={{marginTop:12,fontSize:13}}>
+          <div>Versión de Odoo: <b>{r.servidor || '-'}</b> | Conexión: <b>{r.autenticacion}</b></div>
+          <table className="tabla" style={{marginTop:8}}>
+            <thead><tr><th>Modelo</th><th>Estado</th><th>Campos que faltan</th></tr></thead>
+            <tbody>{(r.modelos || []).map(m => (
+              <tr key={m.modelo}><td>{m.modelo}</td><td style={{color: m.estado === 'ok' ? 'var(--success)' : 'var(--danger)', fontWeight:700}}>{m.estado}</td><td>{(m.faltan || []).join(', ') || '-'}</td></tr>
+            ))}</tbody>
+          </table>
+          {r.consultas && <div style={{marginTop:8}}>{Object.entries(r.consultas).map(([k, v]) => <div key={k}>{k}: <b>{v}</b></div>)}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── ALMACENES DE TRASPASO (busca en Odoo, agrega/quita) ──
 function PanelAlmacenes({ toast }) {
   const [configurados, setConfigurados] = useState(null)
@@ -355,6 +387,7 @@ export default function AdminPanel({ toast, miRol }) {
       </div>
 
       {tab === 'almacenes' && <PanelAlmacenes toast={toast} />}
+      {tab === 'almacenes' && <PanelCompatibilidadOdoo />}
 
       {tab === 'usuarios' && (
         <div className="panel">
