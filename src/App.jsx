@@ -546,6 +546,8 @@ function NuevaEntrega({ toast, irDetalle }) {
     try {
       const res = await api.subirPDF(archivo, sistema, '', forzar)
       toast(res.total + ' productos extraidos del PDF', 'ok')
+      // Si las cantidades del PDF no coincidian con Odoo, se tomaron las de Odoo: avisar
+      if (res.aviso) toast(res.aviso, 'error')
       irDetalle(res.id_entrega)
     } catch (e) {
       if (e.status === 409 && !forzar) {

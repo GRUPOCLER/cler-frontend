@@ -116,6 +116,7 @@ function PanelCompatibilidadOdoo() {
       {r && (
         <div style={{marginTop:12,fontSize:13}}>
           <div>Versión de Odoo: <b>{r.servidor || '-'}</b> | Conexión: <b>{r.autenticacion}</b></div>
+          {(r.alertas || []).map((x, i) => <div key={i} className="error" style={{marginTop:6}}>{x}</div>)}
           <table className="tabla" style={{marginTop:8}}>
             <thead><tr><th>Modelo</th><th>Estado</th><th>Campos que faltan</th></tr></thead>
             <tbody>{(r.modelos || []).map(m => (
