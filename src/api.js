@@ -9,6 +9,28 @@ let _token = localStorage.getItem('cler_token') || ''
 let _user  = JSON.parse(localStorage.getItem('cler_user') || 'null')
 
 export function getUser()  { return _user }
+export const esAdmin = () => !!_user?.es_admin
+// Rol del usuario EN un modulo ('admin' si es administrador, null si no tiene acceso)
+export function rolEn(modulo) {
+  if (!_user) return null
+  if (_user.es_admin) return 'admin'
+  return (_user.modulos || {})[modulo] || null
+}
+export const tieneModulo = (m) => !!rolEn(m)
+export const esJefeEn = (m) => ['admin', 'gerente'].includes(rolEn(m))
+// Gerente de algun modulo (puede registrar operadores)
+export const esGerenteAlguno = () => Object.values(_user?.modulos || {}).includes('gerente')
+
+function guardarUsuario(d) {
+  _user = { usuario: d.usuario, nombre: d.nombre, es_admin: !!d.es_admin, modulos: d.modulos || {} }
+  localStorage.setItem('cler_user', JSON.stringify(_user))
+}
+// Pide al servidor los accesos actuales (por si el admin los cambio)
+export async function refrescarUsuario() {
+  const d = await req('/api/auth/yo')
+  if (d) guardarUsuario(d)
+  return _user
+}
 export function getToken() { return _token }
 
 export function logout() {
@@ -35,9 +57,8 @@ export async function login(usuario, password) {
     body: JSON.stringify({ usuario, password })
   })
   _token = data.token
-  _user  = { usuario: data.usuario, nombre: data.nombre, rol: data.rol }
   localStorage.setItem('cler_token', _token)
-  localStorage.setItem('cler_user', JSON.stringify(_user))
+  guardarUsuario(data)
   return data
 }
 
@@ -128,6 +149,50 @@ export const marcarImpresaSueltas = (idEntrega, motivo = null) =>
   req(`/api/entregas/${idEntrega}/etiquetas-sueltas/marcar-impresa`, {
     method: 'POST', body: JSON.stringify({ motivo })
   })
+
+// ── CONTROL DE OV (refacciones) ──
+async function reqForm(path, fd) {
+  const headers = {}
+  if (_token) headers['Authorization'] = 'Bearer ' + _token
+  const res = await fetch(API_URL + path, { method: 'POST', headers, body: fd })
+  if (res.status === 401) { logout(); window.location.reload(); return }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Error ' + res.status)
+  }
+  return res.json()
+}
+const post = (path, body) => req(path, { method: 'POST', body: JSON.stringify(body || {}) })
+export const ovListar = (ver = 'activas', q = '') => req(`/api/ov?ver=${encodeURIComponent(ver)}&q=${encodeURIComponent(q)}`)
+export const ovDetalle = (id) => req(`/api/ov/${id}`)
+export const ovLeer = (archivo) => { const fd = new FormData(); fd.append('archivo', archivo); return reqForm('/api/ov/leer', fd) }
+export const ovCrear = (ov) => post('/api/ov', { ov })
+export const ovSurtirEscanear = (id, codigo, cantidad = 1) => post(`/api/ov/${id}/surtido/escanear`, { codigo, cantidad })
+export const ovSurtirLinea = (id, lid, cantidad) => post(`/api/ov/${id}/surtido/linea/${lid}`, { cantidad })
+export const ovSurtidoTerminar = (id, motivo) => post(`/api/ov/${id}/surtido/terminar`, { cantidad: 0, motivo })
+export const ovPrepIniciar = (id) => post(`/api/ov/${id}/preparacion/iniciar`)
+export const ovCajaNueva = (id) => post(`/api/ov/${id}/preparacion/cajas`)
+export const ovCajaEscanear = (id, cid, codigo, cantidad = 1) => post(`/api/ov/${id}/preparacion/cajas/${cid}/escanear`, { codigo, cantidad })
+export const ovCajaQuitar = (id, cid, linea_id, cantidad = 1) => post(`/api/ov/${id}/preparacion/cajas/${cid}/quitar?linea_id=${linea_id}&cantidad=${cantidad}`)
+export const ovCajaCerrar = (id, cid, peso_kg) => post(`/api/ov/${id}/preparacion/cajas/${cid}/cerrar`, { peso_kg: peso_kg || null })
+export const ovCajaReabrir = (id, cid) => post(`/api/ov/${id}/preparacion/cajas/${cid}/reabrir`)
+export const ovPrepTerminar = (id, motivo) => post(`/api/ov/${id}/preparacion/terminar`, { cantidad: 0, motivo })
+export const ovEtiquetas = (id, cajaId) => req(`/api/ov/${id}/etiquetas${cajaId ? '?caja_id=' + cajaId : ''}`)
+export const ovMarcarImpresas = (id, caja_ids) => post(`/api/ov/${id}/impresion`, { caja_ids })
+export const ovEntregaValidar = (id, archivo) => { const fd = new FormData(); fd.append('archivo', archivo); return reqForm(`/api/ov/${id}/entrega/validar`, fd) }
+export const ovEntregaRegistrar = (id, { folio, archivo, confirmar }) => {
+  const fd = new FormData(); fd.append('folio', folio || ''); fd.append('confirmar_diferencias', confirmar ? 'true' : 'false')
+  if (archivo) fd.append('archivo', archivo)
+  return reqForm(`/api/ov/${id}/entrega`, fd)
+}
+export const ovFacturaRegistrar = (id, { folio, archivo, confirmar }) => {
+  const fd = new FormData(); fd.append('folio', folio || ''); fd.append('confirmar', confirmar ? 'true' : 'false')
+  if (archivo) fd.append('archivo', archivo)
+  return reqForm(`/api/ov/${id}/factura`, fd)
+}
+export const ovCancelar = (id, motivo) => post(`/api/ov/${id}/cancelar`, { cantidad: 0, motivo })
+export const ovCatalogoEstado = () => req('/api/ov/catalogo/estado')
+export const ovCatalogoImportar = (archivo) => { const fd = new FormData(); fd.append('archivo', archivo); return reqForm('/api/ov/catalogo/importar', fd) }
 
 // ── ANALISIS (reporteria, solo lectura) ──
 export const obtenerAnalisis = ({ desde, hasta, empresa, sistema }) => {
@@ -234,7 +299,6 @@ export const odooCargarEntrega = (pickingIds) =>
 
 // ── TRASPASOS INTERNOS (CEDIS, FULL MELI, Eventos y Expo) ──
 export const odooListarTraspasos = () => req('/api/odoo/traspasos')
-export const odooCompatibilidad = () => req('/api/odoo/diag/compatibilidad')
 
 export const odooCargarTraspaso = (pickingId) =>
   req('/api/odoo/traspaso?picking_id=' + pickingId, { method: 'POST' })

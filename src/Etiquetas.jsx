@@ -50,11 +50,12 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
         <div className="et-cliente">{d.nombre_cliente || '-'}</div>
         {d.sucursal && <div className="et-sucursal">Suc: {d.sucursal}</div>}
         <div className="et-direccion">{d.direccion || '-'}</div>
+        {d.referencia && <div className="et-sucursal">Ref: {d.referencia}</div>}
       </div>
 
       <div className="et-grid3">
         <div>
-          <div className="et-label-sm">N Entrega</div>
+          <div className="et-label-sm">{d.doc_principal === 'OV' ? 'OV' : 'N Entrega'}</div>
           <div className="et-mono-bold">{d.barcode_entrega || d.num_entrega}</div>
         </div>
         {d.orden && (
@@ -69,7 +70,15 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
         </div>
       </div>
 
-      {hayPesos && (
+      {hayPesos && d.sin_palet && (
+        <div className="et-pesos" style={{ gridTemplateColumns: '1fr' }}>
+          <div className="et-peso-box" style={{ borderRight: 'none' }}>
+            <div className="et-peso-lbl">Peso</div>
+            <div className="et-peso-val">{fmtKg(d.peso_neto_kg)}</div>
+          </div>
+        </div>
+      )}
+      {hayPesos && !d.sin_palet && (
         <div className="et-pesos" style={{ gridTemplateColumns: tieneDims ? 'repeat(4,1fr)' : 'repeat(3,1fr)' }}>
           <div className="et-peso-box">
             <div className="et-peso-lbl">Neto</div>
@@ -119,14 +128,14 @@ function PaginaEtiqueta({ d, chunkProds, sub, subTotal }) {
         {subTotal > 1 && <div className="et-parte">Parte {sub} de {subTotal}</div>}
       </div>
 
-      <div className="et-footer">
+      <div className={"et-footer" + (d.sin_palet ? " et-footer-2c" : "")}>
         <div className="et-bc-block">
-          <div className="et-bc-lbl">Entrega</div>
+          <div className="et-bc-lbl">{d.doc_principal === 'OV' ? 'OV' : 'Entrega'}</div>
           {d.barcode_entrega_url && <img src={d.barcode_entrega_url} className="et-bc-img" alt="bc-entrega" />}
           <div className="et-bc-txt">{d.barcode_entrega || d.num_entrega || '-'}</div>
         </div>
         <div className="et-bc-block et-bc-block-2">
-          <div className="et-bc-lbl">Tarima</div>
+          <div className="et-bc-lbl">{d.tipo_bulto === 'caja' ? 'Caja' : 'Tarima'}</div>
           {d.barcode_tarima_url && <img src={d.barcode_tarima_url} className="et-bc-img" alt="bc-tarima" />}
           <div className="et-bc-txt">{d.barcode_tarima || d.id_tarima || '-'}</div>
         </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { MODULOS, nombreRol, moduloDeRuta } from './modulos.js'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import * as api from './api.js'
 import Etiquetas from './Etiquetas.jsx'
@@ -7,6 +8,7 @@ import ListaEmpaque from './ListaEmpaque.jsx'
 import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 import Analisis from './Analisis.jsx'
+import ControlOV, { OVDetalle, OVEtiquetas } from './ControlOV.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -350,7 +352,7 @@ function Dashboard({ irDetalle, onFusionar }) {
 
   return (
     <div className="contenedor">
-      <div className="titulo-pag">Inicio</div>
+      <div className="titulo-pag">Embarques</div>
       <div className="sub-pag">Actividad y entregas recientes</div>
 
       <div className="stats">
@@ -546,8 +548,6 @@ function NuevaEntrega({ toast, irDetalle }) {
     try {
       const res = await api.subirPDF(archivo, sistema, '', forzar)
       toast(res.total + ' productos extraidos del PDF', 'ok')
-      // Si las cantidades del PDF no coincidian con Odoo, se tomaron las de Odoo: avisar
-      if (res.aviso) toast(res.aviso, 'error')
       irDetalle(res.id_entrega)
     } catch (e) {
       if (e.status === 409 && !forzar) {
@@ -1014,8 +1014,8 @@ function ModalFusion({ onClose, onConfirmar }) {
 function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
   const { id } = useParams()
   const navigate = useNavigate()
-  const volver = () => navigate('/')
-  const miRol = api.getUser()?.rol
+  const volver = () => navigate('/embarques')
+  const miRol = api.rolEn('embarques')
   const [ent, setEnt] = useState(null)
   const [sel, setSel] = useState(new Set())
   const [modalNueva, setModalNueva] = useState(false)
@@ -1120,7 +1120,7 @@ function Detalle({ toast, verEtiquetas, verEtiquetasSueltas, verPacking }) {
       await api.eliminarEntrega(id, motivo)
       toast('Entrega eliminada', 'ok')
       setModalEliminarEntrega(false)
-      navigate('/')
+      navigate('/embarques')
     } catch (e) { toast(e.message, 'error') }
   }
 
@@ -1661,7 +1661,7 @@ function VistaPacking({ toast }) {
   const [modalMotivo, setModalMotivo] = useState(null)
   const [modalParcial, setModalParcial] = useState(false)
   const [parciales, setParciales] = useState([])
-  const miRol = api.getUser()?.rol
+  const miRol = api.rolEn('embarques')
   const esJefe = miRol === 'admin' || miRol === 'gerente'
   const esParcial = !!sid
 
@@ -1770,17 +1770,27 @@ function VistaPacking({ toast }) {
 // ── MIGAJA DE CONTEXTO — siempre visible, incluso al imprimir ──
 function Migaja() {
   const { pathname } = useLocation()
-  const partes = ['Inicio']
+  const seccion = moduloDeRuta(pathname)
   const seg = pathname.split('/').filter(Boolean) // ej: ['entregas','CS-123','etiquetas']
-
-  if (pathname === '/nueva') partes.push('Nueva entrega')
-  else if (pathname === '/reimpresiones') { partes.length = 0; partes.push('Autorizaciones') }
-  else if (pathname === '/admin') { partes.length = 0; partes.push('Administracion') }
-  else if (seg[0] === 'entregas' && seg[1]) {
-    partes.push(seg[1])
-    if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
-    if (seg[2] === 'etiquetas-sueltas') partes.push('Etiquetas sueltas')
-    if (seg[2] === 'packing') partes.push(seg[3] === 'parcial' ? 'Lista de empaque parcial' : 'Lista de empaque')
+  let partes
+  if (seccion === 'hub') partes = ['Inicio']
+  else if (seccion === 'admin') partes = ['Administración']
+  else if (seccion === 'refacciones') {
+    partes = ['Refacciones']
+    if (seg[1]) partes.push('OV ' + seg[1])
+    if (seg[2] === 'etiquetas') partes.push('Etiquetas')
+  } else if (seccion === 'inventario') partes = ['Inventario y Operaciones']
+  else {
+    partes = ['Embarques']
+    if (pathname === '/nueva') partes.push('Nueva entrega')
+    else if (pathname === '/reimpresiones') partes.push('Autorizaciones')
+    else if (pathname === '/analisis') partes.push('Análisis')
+    else if (seg[0] === 'entregas' && seg[1]) {
+      partes.push(seg[1])
+      if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
+      if (seg[2] === 'etiquetas-sueltas') partes.push('Etiquetas sueltas')
+      if (seg[2] === 'packing') partes.push(seg[3] === 'parcial' ? 'Lista de empaque parcial' : 'Lista de empaque')
+    }
   }
 
   return (
@@ -1790,6 +1800,39 @@ function Migaja() {
       ))}
     </div>
   )
+}
+
+// ── INICIO: modulos del sistema ──────────────────────────
+function Inicio({ user }) {
+  const navigate = useNavigate()
+  return (
+    <div className="contenedor">
+      <div className="titulo-pag">Hola, {user?.nombre || user?.usuario}</div>
+      <div className="sub-pag">Elige el módulo con el que vas a trabajar</div>
+      <div className="mod-grid">
+        {MODULOS.map(m => {
+          const rol = api.rolEn(m.id)
+          const entra = !!rol && m.disponible
+          return (
+            <button key={m.id} type="button" className={'mod-card' + (entra ? '' : ' mod-card--off')}
+              disabled={!entra} onClick={() => navigate(m.ruta)}>
+              <span className="mod-nombre">{m.nombre}</span>
+              <span className="mod-desc">{m.desc}</span>
+              <span className="mod-pie">
+                {!m.disponible ? <span className="chip chip-warn">Próximamente</span>
+                  : rol ? <span className="chip chip-raiker">Tu rol: {nombreRol(rol)}</span>
+                  : <span className="mod-sin">Sin acceso. Pídelo al administrador.</span>}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function SoloConAcceso({ modulo, children }) {
+  return api.tieneModulo(modulo) ? children : <Navigate to="/" replace />
 }
 
 // ── APP ──────────────────────────────────────────────────
@@ -1803,10 +1846,22 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
 
+  // Accesos frescos al abrir la app (el admin pudo cambiarlos) y atajo si solo tiene un modulo
+  const [accesosListos, setAccesosListos] = useState(false)
   useEffect(() => {
     if (!logueado) return
-    const user0 = api.getUser()
-    if (user0?.rol !== 'admin' && user0?.rol !== 'gerente') return
+    api.refrescarUsuario().catch(() => {}).finally(() => {
+      setAccesosListos(true)
+      if (window.location.pathname === '/') {
+        const ok = MODULOS.filter(m => m.disponible && api.tieneModulo(m.id))
+        if (ok.length === 1) navigate(ok[0].ruta, { replace: true })
+      }
+    })
+  }, [logueado])
+
+  useEffect(() => {
+    if (!logueado || !accesosListos) return
+    if (!api.esJefeEn('embarques')) return
     const check = () => Promise.all([api.contarPendientes(), api.contarPendientesCambios()])
       .then(([r1, r2]) => {
         const total = (r1.pendientes || 0) + (r2.pendientes || 0)
@@ -1822,13 +1877,13 @@ export default function App() {
     check()
     const intervalo = setInterval(check, 8000)
     return () => clearInterval(intervalo)
-  }, [logueado])
+  }, [logueado, accesosListos])
 
   // Avisar (a CUALQUIER usuario) cuando una solicitud que el mismo hizo
   // se resuelve — "Se autorizo tu reimpresion de..." etc.
   const vistosResolucionRef = useRef(null) // null = primera carga aun no hecha
   useEffect(() => {
-    if (!logueado) return
+    if (!logueado || !accesosListos || !api.tieneModulo('embarques')) return
     const TIPO_LABEL = { TARIMA: 'carga agrupada', SUELTAS: 'carga suelta', PACKING: 'lista de empaque' }
     const check = () => api.misSolicitudes().then(lista => {
       const resueltas = lista.filter(s => s.estatus === 'aprobada' || s.estatus === 'rechazada')
@@ -1854,7 +1909,7 @@ export default function App() {
     check()
     const intervalo = setInterval(check, 8000)
     return () => clearInterval(intervalo)
-  }, [logueado])
+  }, [logueado, accesosListos])
 
   // Si ya esta parado en Autorizaciones, no hace falta seguir avisando
   useEffect(() => {
@@ -1862,6 +1917,7 @@ export default function App() {
   }, [location.pathname])
 
   if (!logueado) return <Login onOk={() => setLogueado(true)} />
+  if (!accesosListos) return <div className="cargando" style={{padding:40}}>Cargando...</div>
 
   const user = api.getUser()
   const irDetalle = (id) => navigate(`/entregas/${id}`)
@@ -1887,6 +1943,7 @@ export default function App() {
     } catch (e) { toast(e.message, 'error') }
   }
 
+  const seccion = moduloDeRuta(location.pathname)
   const enVistaEtiqueta = /\/(etiquetas|etiquetas-sueltas|packing)(\/|$)/.test(location.pathname)
 
   return (
@@ -1896,25 +1953,36 @@ export default function App() {
         <div className="topbar">
           <button className="topbar-marca" onClick={() => navigate('/')} title="Ir al inicio"><span className="cl-logo" aria-hidden="true"></span><span>GRUPO CLER</span></button>
           <nav className="topbar-nav">
-            <button className={'nav-btn' + (location.pathname === '/' ? ' activo' : '')}
-              onClick={() => navigate('/')}>Inicio</button>
-            <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
-              onClick={() => navigate('/nueva')}>Nueva entrega</button>
-            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
-              <button className={'nav-btn' + (location.pathname === '/analisis' ? ' activo' : '')}
-                onClick={() => navigate('/analisis')}>Análisis</button>
-            )}
-            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
-              <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
-                onClick={() => navigate('/reimpresiones')}>
-                Autorizaciones
-                {pendientesReimpresion > 0 && <span className="chip chip-warn" style={{marginLeft:6}}>{pendientesReimpresion}</span>}
-              </button>
-            )}
-            {(user?.rol === 'admin' || user?.rol === 'gerente') && (
-              <button className={'nav-btn' + (location.pathname === '/admin' ? ' activo' : '')}
+            <button className={'nav-btn' + (seccion === 'hub' ? ' activo' : '')}
+              onClick={() => navigate('/')}>Módulos</button>
+            {seccion === 'embarques' && <>
+              <span className="nav-modulo">Embarques</span>
+              <button className={'nav-btn' + (location.pathname === '/embarques' ? ' activo' : '')}
+                onClick={() => navigate('/embarques')}>Entregas</button>
+              <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
+                onClick={() => navigate('/nueva')}>Nueva entrega</button>
+              {api.esJefeEn('embarques') && (
+                <button className={'nav-btn' + (location.pathname === '/analisis' ? ' activo' : '')}
+                  onClick={() => navigate('/analisis')}>Análisis</button>
+              )}
+              {api.esJefeEn('embarques') && (
+                <button className={'nav-btn' + (location.pathname === '/reimpresiones' ? ' activo' : '')}
+                  onClick={() => navigate('/reimpresiones')}>
+                  Autorizaciones
+                  {pendientesReimpresion > 0 && <span className="chip chip-warn" style={{marginLeft:6}}>{pendientesReimpresion}</span>}
+                </button>
+              )}
+            </>}
+            {seccion === 'refacciones' && <>
+              <span className="nav-modulo">Refacciones</span>
+              <button className={'nav-btn' + (location.pathname === '/ov' ? ' activo' : '')}
+                onClick={() => navigate('/ov')}>Control de OV</button>
+            </>}
+            {seccion === 'inventario' && <span className="nav-modulo">Inventario y Operaciones</span>}
+            {(user?.es_admin || api.esGerenteAlguno()) && (
+              <button className={'nav-btn' + (seccion === 'admin' ? ' activo' : '')}
                 onClick={() => navigate('/admin')}>
-                {user?.rol === 'gerente' ? 'Registrar operador' : 'Administracion'}
+                {user?.es_admin ? 'Administración' : 'Registrar operador'}
               </button>
             )}
           </nav>
@@ -1928,19 +1996,23 @@ export default function App() {
       )}
       <div className="contenido">
         <Routes>
-          <Route path="/" element={<Dashboard irDetalle={irDetalle} onFusionar={() => setModalFusion(true)} />} />
-          <Route path="/nueva" element={<NuevaEntrega toast={toast} irDetalle={irDetalle} />} />
+          <Route path="/" element={<Inicio user={user} />} />
+          <Route path="/embarques" element={<SoloConAcceso modulo="embarques"><Dashboard irDetalle={irDetalle} onFusionar={() => setModalFusion(true)} /></SoloConAcceso>} />
+          <Route path="/nueva" element={<SoloConAcceso modulo="embarques"><NuevaEntrega toast={toast} irDetalle={irDetalle} /></SoloConAcceso>} />
           <Route path="/entregas/:id" element={
-            <Detalle toast={toast} verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} verPacking={verPacking} />
-          } />
-          <Route path="/entregas/:id/etiquetas" element={<VistaEtiquetas toast={toast} />} />
-          <Route path="/entregas/:id/etiquetas/:idTarima" element={<VistaEtiquetas toast={toast} />} />
-          <Route path="/entregas/:id/etiquetas-sueltas" element={<VistaEtiquetasSueltas toast={toast} />} />
-          <Route path="/entregas/:id/packing" element={<VistaPacking toast={toast} />} />
-          <Route path="/entregas/:id/packing/parcial/:sid" element={<VistaPacking toast={toast} />} />
-          <Route path="/admin" element={<AdminPanel toast={toast} miRol={user?.rol} />} />
-          <Route path="/reimpresiones" element={<ReimpresionesPanel toast={toast} />} />
-          <Route path="/analisis" element={(user?.rol === 'admin' || user?.rol === 'gerente') ? <Analisis toast={toast} /> : <Navigate to="/" replace />} />
+            <SoloConAcceso modulo="embarques"><Detalle toast={toast} verEtiquetas={verEtiquetas} verEtiquetasSueltas={verEtiquetasSueltas} verPacking={verPacking} /></SoloConAcceso>} />
+          <Route path="/entregas/:id/etiquetas" element={<SoloConAcceso modulo="embarques"><VistaEtiquetas toast={toast} /></SoloConAcceso>} />
+          <Route path="/entregas/:id/etiquetas/:idTarima" element={<SoloConAcceso modulo="embarques"><VistaEtiquetas toast={toast} /></SoloConAcceso>} />
+          <Route path="/entregas/:id/etiquetas-sueltas" element={<SoloConAcceso modulo="embarques"><VistaEtiquetasSueltas toast={toast} /></SoloConAcceso>} />
+          <Route path="/entregas/:id/packing" element={<SoloConAcceso modulo="embarques"><VistaPacking toast={toast} /></SoloConAcceso>} />
+          <Route path="/entregas/:id/packing/parcial/:sid" element={<SoloConAcceso modulo="embarques"><VistaPacking toast={toast} /></SoloConAcceso>} />
+          <Route path="/reimpresiones" element={<SoloConAcceso modulo="embarques"><ReimpresionesPanel toast={toast} /></SoloConAcceso>} />
+          <Route path="/analisis" element={api.esJefeEn('embarques') ? <Analisis toast={toast} /> : <Navigate to="/" replace />} />
+          <Route path="/admin" element={(user?.es_admin || api.esGerenteAlguno()) ? <AdminPanel toast={toast} esAdmin={!!user?.es_admin} /> : <Navigate to="/" replace />} />
+          <Route path="/ov" element={<SoloConAcceso modulo="refacciones"><ControlOV toast={toast} /></SoloConAcceso>} />
+          <Route path="/ov/:id" element={<SoloConAcceso modulo="refacciones"><OVDetalle toast={toast} /></SoloConAcceso>} />
+          <Route path="/ov/:id/etiquetas" element={<SoloConAcceso modulo="refacciones"><OVEtiquetas toast={toast} /></SoloConAcceso>} />
+          <Route path="/inventario" element={<div className="contenedor"><div className="titulo-pag">Inventario y Operaciones</div><div className="sub-pag">Layout de ubicaciones y conteos de inventario. Este módulo todavía no está disponible aquí.</div></div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

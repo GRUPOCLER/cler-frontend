@@ -1,42 +1,50 @@
 import { useState, useEffect } from 'react'
 import * as api from './api.js'
 import { Modal } from './App.jsx'
+import { MODULOS, ROLES, nombreRol } from './modulos.js'
 
-const ROLES = [
-  { valor: 'operador', nombre: 'Operador', desc: 'Opera los modulos, sin reimpresion ni reapertura' },
-  { valor: 'gerente',  nombre: 'Gerente',  desc: 'Autoriza reimpresiones, reabre entregas, registra operadores' },
-  { valor: 'admin',    nombre: 'Administrador', desc: 'Control total del sistema' },
-]
-
-function chipRol(rol) {
-  const map = { admin: 'chip-warn', gerente: 'chip-raiker', operador: 'chip-ok' }
-  return map[rol] || 'chip-ok'
+// Quien puede entrar a que, y con que rol (por modulo)
+function ChipsAcceso({ u }) {
+  if (u.es_admin) return <span className="chip chip-warn">Administrador (todo)</span>
+  const mods = MODULOS.filter(m => u.modulos && u.modulos[m.id])
+  if (mods.length === 0) return <span style={{fontSize:12,color:'var(--text3)'}}>Sin acceso</span>
+  return (
+    <span style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      {mods.map(m => <span key={m.id} className="chip chip-raiker">{m.nombre}: {nombreRol(u.modulos[m.id])}</span>)}
+    </span>
+  )
 }
 
 // ── MODAL: CREAR / EDITAR USUARIO ────────────────────────
-function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
+function ModalUsuario({ usuarioActual, esAdmin, onClose, onGuardado, toast }) {
   const editando = !!usuarioActual
-  const soyGerente = miRol === 'gerente'
+  const soyGerente = !esAdmin
   const [usuario, setUsuario] = useState(usuarioActual?.usuario || '')
   const [email, setEmail] = useState(usuarioActual?.email || '')
   const [nombre, setNombre] = useState(usuarioActual?.nombre_display || '')
   const [password, setPassword] = useState('')
-  const [rol, setRol] = useState(usuarioActual?.rol || 'operador')
+  const [admin, setAdmin] = useState(!!usuarioActual?.es_admin)
+  const [modulos, setModulos] = useState({ ...(usuarioActual?.modulos || {}) })
   const [activo, setActivo] = useState(usuarioActual ? usuarioActual.activo : true)
   const [guardando, setGuardando] = useState(false)
 
-  const rolesDisponibles = miRol === 'admin' ? ROLES : ROLES.filter(r => r.valor === 'operador')
+  const setMod = (id, rol) => setModulos(m => {
+    const n = { ...m }
+    if (rol) n[id] = rol; else delete n[id]
+    return n
+  })
 
   const guardar = async () => {
     setGuardando(true)
     try {
       if (editando) {
-        const body = { nombre_display: nombre, rol, activo, email }
+        const body = { nombre_display: nombre, activo, email, es_admin: admin, modulos: admin ? {} : modulos }
         if (password) body.password = password
         await api.editarUsuario(usuario, body)
         toast('Usuario actualizado', 'ok')
       } else {
-        await api.crearUsuario({ usuario, password, nombre_display: nombre, rol, email })
+        await api.crearUsuario({ usuario, password, nombre_display: nombre, email,
+          es_admin: admin, modulos: admin ? {} : modulos })
         toast('Usuario creado', 'ok')
       }
       onGuardado()
@@ -67,20 +75,37 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
           <input className="inp" style={{marginBottom:12}} type="password" value={password}
             onChange={e => setPassword(e.target.value)} placeholder={editando ? 'Dejar en blanco para no cambiar' : ''} />
 
-          {!soyGerente && (
+          {soyGerente ? (
+            <p style={{fontSize:12,color:'var(--text3)',lineHeight:1.5,marginBottom:12}}>
+              La cuenta se crea como Operador en los módulos donde tú eres Gerente.
+            </p>
+          ) : (
             <>
-              <label className="dim-label">Rol</label>
-              <select className="inp" style={{marginBottom:6}} value={rol} onChange={e => setRol(e.target.value)}>
-                {rolesDisponibles.map(r => <option key={r.valor} value={r.valor}>{r.nombre}</option>)}
-              </select>
-              <div style={{fontSize:11,color:'var(--text3)',marginBottom:12}}>
-                {ROLES.find(r => r.valor === rol)?.desc}
+              <label className="dim-label">Acceso por módulo</label>
+              <div className="acc-matriz">
+                {MODULOS.map(m => (
+                  <div key={m.id} className="acc-fila">
+                    <div>
+                      <div className="acc-mod">{m.nombre}</div>
+                      {!m.disponible && <div className="acc-nota">Aún sin pantallas en esta app</div>}
+                    </div>
+                    <select className="inp acc-sel" disabled={admin} value={admin ? '' : (modulos[m.id] || '')}
+                      onChange={e => setMod(m.id, e.target.value)}>
+                      <option value="">{admin ? 'Todo (administrador)' : 'Sin acceso'}</option>
+                      {!admin && m.roles.map(r => <option key={r} value={r}>{nombreRol(r)}</option>)}
+                    </select>
+                  </div>
+                ))}
               </div>
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',margin:'12px 0 4px'}}>
+                <input type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)} />
+                Administrador: acceso total y gestión de usuarios
+              </label>
             </>
           )}
 
           {editando && (
-            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
+            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',marginTop:8}}>
               <input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} />
               Cuenta activa
             </label>
@@ -97,36 +122,40 @@ function ModalUsuario({ usuarioActual, miRol, onClose, onGuardado, toast }) {
   )
 }
 
-// ── COMPATIBILIDAD CON ODOO (tras actualizar de version) ──
-function PanelCompatibilidadOdoo() {
-  const [r, setR] = useState(null)
-  const [cargando, setCargando] = useState(false)
-  const [error, setError] = useState(null)
-  const revisar = async () => {
-    setCargando(true); setError(null)
-    try { setR(await api.odooCompatibilidad()) } catch (e) { setError(e.message) } finally { setCargando(false) }
-  }
+// ── QUIEN PUEDE QUE (resumen por modulo) ─────────────────
+function PanelPermisos({ usuarios }) {
+  if (!usuarios) return <div className="cargando">Cargando...</div>
   return (
-    <div className="panel">
-      <div className="panel-titulo">Compatibilidad con Odoo
-        {r && <span className={'chip ' + (r.ok ? 'chip-ok' : 'chip-warn')}>{r.ok ? 'Todo en orden' : 'Revisar'}</span>}</div>
-      <p style={{fontSize:12,color:'var(--text2)',margin:'0 0 10px'}}>Revisa contra el Odoo conectado que existan los modelos y campos que usa el sistema y que las consultas respondan. Úsalo después de una actualización de Odoo.</p>
-      <button className="btn-principal" disabled={cargando} onClick={revisar}>{cargando ? 'Revisando...' : 'Revisar compatibilidad'}</button>
-      {error && <div className="error" style={{marginTop:10}}>{error}</div>}
-      {r && (
-        <div style={{marginTop:12,fontSize:13}}>
-          <div>Versión de Odoo: <b>{r.servidor || '-'}</b> | Conexión: <b>{r.autenticacion}</b></div>
-          {(r.alertas || []).map((x, i) => <div key={i} className="error" style={{marginTop:6}}>{x}</div>)}
-          <table className="tabla" style={{marginTop:8}}>
-            <thead><tr><th>Modelo</th><th>Estado</th><th>Campos que faltan</th></tr></thead>
-            <tbody>{(r.modelos || []).map(m => (
-              <tr key={m.modelo}><td>{m.modelo}</td><td style={{color: m.estado === 'ok' ? 'var(--success)' : 'var(--danger)', fontWeight:700}}>{m.estado}</td><td>{(m.faltan || []).join(', ') || '-'}</td></tr>
-            ))}</tbody>
-          </table>
-          {r.consultas && <div style={{marginTop:8}}>{Object.entries(r.consultas).map(([k, v]) => <div key={k}>{k}: <b>{v}</b></div>)}</div>}
-        </div>
-      )}
-    </div>
+    <>
+      {MODULOS.map(m => {
+        const gente = usuarios.filter(u => u.activo && (u.es_admin || (u.modulos && u.modulos[m.id])))
+        return (
+          <div className="panel" key={m.id}>
+            <div className="panel-titulo">{m.nombre}<span className="chip chip-ok">{gente.length}</span></div>
+            <p style={{fontSize:12,color:'var(--text3)',marginBottom:10,lineHeight:1.5}}>{m.desc}</p>
+            <div className="acc-roles">
+              {m.roles.map(r => (
+                <div key={r}><b>{nombreRol(r)}</b>: {ROLES[r].desc}</div>
+              ))}
+            </div>
+            {gente.length === 0 ? <div className="vacio">Nadie tiene acceso todavía.</div> : (
+              <table className="tabla">
+                <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol en el módulo</th></tr></thead>
+                <tbody>
+                  {gente.map(u => (
+                    <tr key={u.usuario}>
+                      <td style={{fontWeight:700}}>{u.usuario}</td>
+                      <td>{u.nombre_display || '—'}</td>
+                      <td><span className={'chip ' + (u.es_admin ? 'chip-warn' : 'chip-raiker')}>{u.es_admin ? 'Administrador' : nombreRol(u.modulos[m.id])}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )
+      })}
+    </>
   )
 }
 
@@ -343,7 +372,7 @@ function ModalAlmacenesUsuario({ usuario, onClose, toast }) {
   )
 }
 
-export default function AdminPanel({ toast, miRol }) {
+export default function AdminPanel({ toast, esAdmin }) {
   const [tab, setTab] = useState('usuarios')
   const [usuarios, setUsuarios] = useState(null)
   const [logs, setLogs] = useState(null)
@@ -354,12 +383,12 @@ export default function AdminPanel({ toast, miRol }) {
   const cargarLogs     = () => api.verLogs().then(setLogs).catch(e => toast(e.message, 'error'))
 
   useEffect(() => {
-    if (tab === 'usuarios' && !usuarios) cargarUsuarios()
+    if ((tab === 'usuarios' || tab === 'permisos') && !usuarios) cargarUsuarios()
     if (tab === 'logs' && !logs) cargarLogs()
   }, [tab])
 
   // Un Gerente solo puede registrar operadores, sin ver listas
-  if (miRol === 'gerente') {
+  if (!esAdmin) {
     return (
       <div className="contenedor">
         <div className="titulo-pag">Registrar operador</div>
@@ -368,7 +397,7 @@ export default function AdminPanel({ toast, miRol }) {
           <button className="btn-principal" onClick={() => setModalUsuario(null)}>+ Registrar operador</button>
         </div>
         {modalUsuario !== undefined && (
-          <ModalUsuario usuarioActual={modalUsuario} miRol={miRol} toast={toast}
+          <ModalUsuario usuarioActual={modalUsuario} esAdmin={esAdmin} toast={toast}
             onClose={() => setModalUsuario(undefined)}
             onGuardado={() => setModalUsuario(undefined)} />
         )}
@@ -379,16 +408,17 @@ export default function AdminPanel({ toast, miRol }) {
   return (
     <div className="contenedor">
       <div className="titulo-pag">Administracion</div>
-      <div className="sub-pag">Usuarios, roles y bitacora de acciones</div>
+      <div className="sub-pag">Usuarios, acceso por módulo y bitácora de acciones</div>
 
       <div className="topbar-nav" style={{marginBottom:20}}>
         <button className={'nav-btn' + (tab === 'usuarios' ? ' activo' : '')} onClick={() => setTab('usuarios')}>Usuarios</button>
+        <button className={'nav-btn' + (tab === 'permisos' ? ' activo' : '')} onClick={() => setTab('permisos')}>Quién puede qué</button>
         <button className={'nav-btn' + (tab === 'almacenes' ? ' activo' : '')} onClick={() => setTab('almacenes')}>Almacenes de traspaso</button>
         <button className={'nav-btn' + (tab === 'logs' ? ' activo' : '')} onClick={() => setTab('logs')}>Bitacora</button>
       </div>
 
       {tab === 'almacenes' && <PanelAlmacenes toast={toast} />}
-      {tab === 'almacenes' && <PanelCompatibilidadOdoo />}
+      {tab === 'permisos' && <PanelPermisos usuarios={usuarios} />}
 
       {tab === 'usuarios' && (
         <div className="panel">
@@ -403,13 +433,13 @@ export default function AdminPanel({ toast, miRol }) {
             : usuarios.length === 0 ? <div className="vacio">Sin usuarios.</div>
             : (
             <table className="tabla">
-              <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estatus</th><th>Último acceso</th><th></th></tr></thead>
+              <thead><tr><th>Usuario</th><th>Nombre</th><th>Acceso por módulo</th><th>Estatus</th><th>Último acceso</th><th></th></tr></thead>
               <tbody>
                 {usuarios.map(u => (
                   <tr key={u.usuario} onClick={() => setModalUsuario(u)}>
                     <td style={{fontWeight:700}}>{u.usuario}</td>
                     <td>{u.nombre_display || '—'}</td>
-                    <td><span className={'chip ' + chipRol(u.rol)}>{u.rol}</span></td>
+                    <td><ChipsAcceso u={u} /></td>
                     <td><span className={u.activo ? 'chip chip-ok' : 'chip chip-warn'}>{u.activo ? 'activo' : 'inactivo'}</span></td>
                     <td style={{fontSize:11,color:'var(--text3)'}}>{u.ultimo_acceso ? api.formatearFecha(u.ultimo_acceso) : '—'}</td>
                     <td style={{display:'flex',gap:6}}>
@@ -449,7 +479,7 @@ export default function AdminPanel({ toast, miRol }) {
       )}
 
       {modalUsuario !== undefined && (
-        <ModalUsuario usuarioActual={modalUsuario} miRol={miRol} toast={toast}
+        <ModalUsuario usuarioActual={modalUsuario} esAdmin={esAdmin} toast={toast}
           onClose={() => setModalUsuario(undefined)}
           onGuardado={() => { setModalUsuario(undefined); cargarUsuarios() }} />
       )}

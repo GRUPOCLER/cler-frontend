@@ -17,26 +17,41 @@ function usarTamanoPagina(reglaCss) {
   }, [reglaCss])
 }
 
+// El numero de OV es el encabezado: 36px para una OV normal (8 digitos); si es larga se achica para que nunca se corte.
+function tamanoOV(txt) {
+  const n = Math.max(String(txt || '').length, 1)
+  return Math.max(14, Math.min(36, Math.floor(215 / (n * 0.68))))
+}
+
 function PaginaEtiquetaSuelta({ d }) {
+  const hayOV = !!(d.orden && String(d.orden).trim())
+  const doc = hayOV ? String(d.orden).trim() : String(d.num_entrega || '')
   return (
     <div className={'et-suelta-pagina' + (d.impresa_veces > 0 ? ' con-sello' : '')}>
-      <div className="et-suelta-top">
-        <div className="et-suelta-clave">{d.clave}</div>
-        <div className="et-suelta-bulto-wrap">
-          <div className="et-suelta-bulto-lbl">Bulto</div>
-          <div className="et-suelta-bulto">{d.num_sku}/{d.total_skus_entrega}</div>
+      <div className="et-suelta-head">
+        <div className="et-suelta-ovbox">
+          <span className="et-suelta-ovlbl">{hayOV ? 'OV' : 'ENTREGA'}</span>
+          <span className="et-suelta-ovnum" style={{ fontSize: tamanoOV(doc) }}>{doc}</span>
+        </div>
+        <div className="et-suelta-npbox">
+          <div className="et-suelta-nplbl">{d.caja_master ? 'Caja' : 'Pieza'}</div>
+          <div className="et-suelta-np">{d.num_sku}/{d.total_skus_entrega}</div>
         </div>
       </div>
 
-      <div className="et-suelta-desc">{d.descripcion}</div>
-      {d.total_cajas_sku > 1 && (
-        <div className="et-suelta-caja">{d.caja_master ? 'Caja' : 'Pieza'} {d.num_caja} de {d.total_cajas_sku}</div>
-      )}
+      <div className="et-suelta-prod">
+        <div className="et-suelta-prod-fila">
+          <span className="et-suelta-clave">{d.clave}</span>
+          {d.total_cajas_sku > 1 && (
+            <span className="et-suelta-caja">{d.caja_master ? 'Caja' : 'Pieza'} {d.num_caja} de {d.total_cajas_sku} de este producto</span>
+          )}
+        </div>
+        <div className="et-suelta-desc">{d.descripcion}</div>
+      </div>
 
       <div className="et-suelta-mid">
         <span className="et-suelta-cliente">{d.nombre_cliente}</span>
-        {d.orden && <span className="et-suelta-ov">OV {d.orden}</span>}
-        {d.sucursal && <span className="et-suelta-ov">{d.sucursal}</span>}
+        {d.sucursal && <span className="et-suelta-suc">{d.sucursal}</span>}
       </div>
       {d.direccion && <div className="et-suelta-dir">{d.direccion}</div>}
 
