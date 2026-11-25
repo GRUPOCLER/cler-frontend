@@ -8,46 +8,12 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import * as api from './api'
 import Etiquetas from './Etiquetas'
 
-const ORDEN = ['recibida', 'en_surtido', 'surtida', 'en_preparacion', 'preparada', 'entregada_sap', 'facturada']
-const NOMBRE = {
-  recibida: 'Recibida', en_surtido: 'En surtido', surtida: 'Surtida', en_preparacion: 'En preparación',
-  preparada: 'Preparada', entregada_sap: 'Entrega generada', facturada: 'Facturada', cancelada: 'Cancelada',
-}
-const TONO = {
-  recibida: 'neutro', en_surtido: 'activo', surtida: 'neutro', en_preparacion: 'activo',
-  preparada: 'neutro', entregada_sap: 'neutro', facturada: 'ok', cancelada: 'mal',
-}
-const ES_JEFE = (r) => r === 'admin' || r === 'gerente'
-const PUEDE_CARGAR = (r) => r === 'admin' || r === 'gerente' || r === 'sap'
-const PUEDE_FACTURAR = (r) => r === 'admin' || r === 'gerente' || r === 'facturacion'
-const nf = (n) => new Intl.NumberFormat('es-MX').format(n || 0)
+import PanelArchivos from './Archivos'
+import {
+  ORDEN, NOMBRE, TONO, ES_JEFE, PUEDE_CARGAR, PUEDE_FACTURAR, nf, dur, fechaHora, fechaCorta, useAhora, segDesde, quien,
+} from './util'
 
-function dur(seg) {
-  if (seg === null || seg === undefined) return '-'
-  const m = Math.floor(seg / 60)
-  if (m < 1) return 'menos de 1 min'
-  if (m < 60) return `${m} min`
-  const h = Math.floor(m / 60)
-  if (h < 48) return `${h} h ${m % 60} min`
-  return `${Math.floor(h / 24)} d ${h % 24} h`
-}
-function fechaHora(iso) {
-  if (!iso) return '-'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return String(iso)
-  const p = Object.fromEntries(new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d).map(x => [x.type, x.value]))
-  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`
-}
-const fechaCorta = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '-') }
-
-function useAhora(ms = 30000) {
-  const [t, setT] = useState(Date.now())
-  useEffect(() => { const i = setInterval(() => setT(Date.now()), ms); return () => clearInterval(i) }, [ms])
-  return t
-}
-const segDesde = (iso, ahora) => (iso ? Math.max(0, Math.floor((ahora - Date.parse(iso)) / 1000)) : 0)
-
-function Modal({ titulo, sub, onClose, children, footer }) {
+export function Modal({ titulo, sub, onClose, children, footer }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={titulo}>
@@ -62,10 +28,10 @@ function Modal({ titulo, sub, onClose, children, footer }) {
   )
 }
 
-function Chip({ estatus, children }) {
+export function Chip({ estatus, children }) {
   return <span className={'ov-chip ov-chip--' + (TONO[estatus] || 'neutro')}>{children || NOMBRE[estatus] || estatus}</span>
 }
-function Barra({ pct, etiqueta }) {
+export function Barra({ pct, etiqueta }) {
   const p = Math.max(0, Math.min(100, pct || 0))
   return (
     <div className="ov-barra" role="img" aria-label={`${etiqueta || 'Avance'} ${Math.round(p)}%`}>
@@ -82,6 +48,26 @@ function Tiempo({ ov, ahora }) {
   return <span className={'ov-tiempo' + (atras ? ' ov-tiempo--atraso' : '')}>{dur(seg)} en este estatus{atras ? ' | atrasada' : ''}</span>
 }
 
+export function SubNav({ activa }) {
+  const navigate = useNavigate()
+  const rol = api.rolEn('refacciones')
+  if (!ES_JEFE(rol)) return null
+  const items = [['lista', 'Lista', '/ov'], ['asignacion', 'Asignación', '/ov/asignacion'], ['tiempos', 'Tiempos', '/ov/tiempos']]
+  return (
+    <div className="sub-tabs" role="tablist" aria-label="Secciones de Control de OV">
+      {items.map(([id, n, ruta]) => (
+        <button key={id} role="tab" aria-selected={activa === id} className={'sub-tab' + (activa === id ? ' on' : '')} onClick={() => navigate(ruta)}>{n}</button>
+      ))}
+    </div>
+  )
+}
+
+// responsable de la etapa en la que esta la OV (para la lista)
+function responsableDe(o, nombres) {
+  const em = ['recibida', 'en_surtido'].includes(o.estatus) ? o.asig_surtido : ['surtida', 'en_preparacion'].includes(o.estatus) ? o.asig_prep : null
+  return em ? quien(nombres, em) : ''
+}
+
 // ───────────────────────── TABLERO ─────────────────────────
 export default function ControlOV({ toast }) {
   const navigate = useNavigate()
@@ -94,6 +80,11 @@ export default function ControlOV({ toast }) {
   const [error, setError] = useState(null)
   const [cargarOV, setCargarOV] = useState(false)
   const [modalCat, setModalCat] = useState(false)
+  const yo = user ? String(user.usuario || '').toLowerCase() : ''
+  const [soloMias, setSoloMias] = useState(rol === 'operador')
+
+  const ovs = useMemo(() => (datos ? datos.ovs.filter(o => !(soloMias && rol === 'operador' && o.asig_surtido !== yo && o.asig_prep !== yo)) : []),
+    [datos, soloMias, rol, yo])
 
   const cargar = useCallback(() => {
     api.ovListar(ver, q).then(d => { setDatos(d); setError(null) }).catch(e => setError(e.message))
@@ -111,6 +102,7 @@ export default function ControlOV({ toast }) {
           {PUEDE_CARGAR(rol) && <button className="btn-principal" onClick={() => setCargarOV(true)}>Cargar OV</button>}
         </div>
       </div>
+      <SubNav activa="lista" />
 
       {datos && (
         <div className="ov-resumen" role="group" aria-label="OV por estatus">
@@ -131,6 +123,9 @@ export default function ControlOV({ toast }) {
             {ORDEN.concat(['cancelada']).map(e => <option key={e} value={e}>{NOMBRE[e]}</option>)}
           </select>
         </label>
+        {rol === 'operador' && (
+          <label className="ov-check ov-mias"><input type="checkbox" checked={soloMias} onChange={e => setSoloMias(e.target.checked)} /> Solo mis OV</label>
+        )}
         <label className="an-campo ov-buscar">Buscar
           <input className="inp" value={q} onChange={e => setQ(e.target.value)} placeholder="OV, cliente, referencia o folio de entrega" />
         </label>
@@ -138,17 +133,18 @@ export default function ControlOV({ toast }) {
 
       {error && <div className="an-estado an-estado--error">{error} <button className="btn-sec" onClick={cargar}>Reintentar</button></div>}
       {!datos && !error && <div className="cargando">Cargando OV...</div>}
-      {datos && datos.ovs.length === 0 && <div className="an-estado">No hay OV con ese filtro.{PUEDE_CARGAR(rol) ? ' Usa "Cargar OV" para adjuntar el PDF de SAP.' : ''}</div>}
-      {datos && datos.ovs.length > 0 && (
+      {datos && ovs.length === 0 && <div className="an-estado">{soloMias && rol === 'operador' ? 'No tienes OV asignadas con ese filtro. Quita "Solo mis OV" para ver todas.' : 'No hay OV con ese filtro.'}{PUEDE_CARGAR(rol) && !(soloMias && rol === 'operador') ? ' Usa "Cargar OV" para adjuntar el PDF de SAP.' : ''}</div>}
+      {datos && ovs.length > 0 && (
         <div className="an-tabla-wrap">
           <table className="tabla ov-tabla">
-            <thead><tr><th>OV</th><th>Cliente</th><th>Estatus</th><th>Surtido</th><th>Preparado</th><th className="num">Cajas</th><th>Entrega</th></tr></thead>
+            <thead><tr><th>OV</th><th>Cliente</th><th>Estatus</th><th>Responsable</th><th>Surtido</th><th>Preparado</th><th className="num">Cajas</th><th>Entrega</th></tr></thead>
             <tbody>
-              {datos.ovs.map(o => (
+              {ovs.map(o => (
                 <tr key={o.id} tabIndex={0} onClick={() => navigate(`/ov/${o.id}`)} onKeyDown={e => e.key === 'Enter' && navigate(`/ov/${o.id}`)}>
                   <td className="an-folio">{o.num_ov}{o.referencia && <div className="an-nota">{o.referencia}</div>}</td>
                   <td>{o.cliente}<div className="an-nota">{o.destino_ciudad}</div></td>
                   <td><Chip estatus={o.estatus} /><div><Tiempo ov={o} ahora={ahora} /></div></td>
+                  <td>{responsableDe(o, datos.nombres) || <span className="an-nota">-</span>}</td>
                   <td style={{ minWidth: 120 }}><Barra pct={o.progreso.pct_surtido} etiqueta="Surtido" /></td>
                   <td style={{ minWidth: 120 }}>{['recibida', 'en_surtido', 'surtida'].includes(o.estatus) ? <span className="an-nota">-</span> : <Barra pct={o.progreso.pct_preparado} etiqueta="Preparado" />}</td>
                   <td className="num">{o.cajas || '-'}</td>
@@ -168,17 +164,23 @@ export default function ControlOV({ toast }) {
 
 function ModalCargarOV({ toast, onClose, onCreada }) {
   const [prev, setPrev] = useState(null)
+  const [archivo, setArchivo] = useState(null)
   const [leyendo, setLeyendo] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState(null)
   const leer = async (f) => {
     if (!f) return
-    setError(null); setPrev(null); setLeyendo(true)
+    setError(null); setPrev(null); setArchivo(f); setLeyendo(true)
     try { setPrev(await api.ovLeer(f)) } catch (e) { setError(e.message) } finally { setLeyendo(false) }
   }
   const crear = async () => {
     setGuardando(true)
-    try { const r = await api.ovCrear(prev); toast('OV cargada', 'ok'); onCreada(r.id) }
+    try {
+      const r = await api.ovCrear(prev)
+      try { if (archivo) await api.adjSubir(r.id, 'ov_pdf', archivo); toast('OV cargada', 'ok') }
+      catch (e) { toast('La OV se cargó, pero no se pudo guardar el PDF: ' + e.message, 'error') }
+      onCreada(r.id)
+    }
     catch (e) { setError(e.message); setGuardando(false) }
   }
   const piezas = prev ? prev.partidas.reduce((a, p) => a + p.cantidad, 0) : 0
@@ -230,6 +232,47 @@ function ModalCategorias({ toast, onClose }) {
   )
 }
 
+function Responsables({ d, rol, toast, recargar }) {
+  const jefe = ES_JEFE(rol)
+  const etapas = [['surtido', 'Surtido', ['recibida', 'en_surtido']], ['prep', 'Preparación', ['recibida', 'en_surtido', 'surtida', 'en_preparacion']]]
+  const cambiar = async (etapa, email) => {
+    try { await api.ovAsignar(d.id, etapa, email); toast('Responsable actualizado', 'ok'); await recargar() } catch (e) { toast(e.message, 'error') }
+  }
+  const visibles = etapas.filter(([id]) => d['asig_' + id] || (jefe && etapas.find(e => e[0] === id)[2].includes(d.estatus)))
+  if (!visibles.length) return null
+  return (
+    <section className="ov-resp" aria-label="Responsables">
+      {visibles.map(([id, nombre, ests]) => {
+        const em = d['asig_' + id], editable = jefe && ests.includes(d.estatus), ops = d.operadores || []
+        return (
+          <div key={id} className="ov-resp-it">
+            <div className="an-nota">Responsable de {nombre.toLowerCase()}</div>
+            {editable ? (
+              <select className="inp" value={em || ''} onChange={e => cambiar(id, e.target.value)} aria-label={'Responsable de ' + nombre.toLowerCase()}>
+                <option value="">Sin asignar</option>
+                {ops.map(p => <option key={p.email} value={p.email}>{p.nombre}</option>)}
+                {em && !ops.some(p => p.email === em) && <option value={em}>{quien(d.nombres, em)}</option>}
+              </select>
+            ) : <b>{em ? quien(d.nombres, em) : 'Sin asignar'}</b>}
+            {em && d['asig_' + id + '_en'] && <div className="an-nota">Asignado {fechaHora(d['asig_' + id + '_en'])}{d['asig_' + id + '_por'] ? ' por ' + quien(d.nombres, d['asig_' + id + '_por']) : ''}</div>}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+// aviso + bloqueo cuando el usuario no es el responsable de la etapa
+function Bloqueo({ op, children }) {
+  const ok = !op || op.ok
+  return (
+    <>
+      {!ok && <div className="ov-aviso ov-aviso--mal" role="alert">{op.motivo}</div>}
+      <fieldset className="ov-fs" disabled={!ok}>{children}</fieldset>
+    </>
+  )
+}
+
 // ───────────────────────── DETALLE ─────────────────────────
 export function OVDetalle({ toast }) {
   const { id } = useParams()
@@ -274,6 +317,8 @@ export function OVDetalle({ toast }) {
         </div>
       </section>
 
+      {abierta && <Responsables d={d} rol={rol} toast={toast} recargar={cargar} />}
+
       <ol className="ov-rail" aria-label="Avance de la OV">
         {ORDEN.map((e, i) => (
           <li key={e} className={'ov-rail-it' + (d.estatus === e ? ' on' : i < idx ? ' hecho' : '')} aria-current={d.estatus === e ? 'step' : undefined}>{NOMBRE[e]}</li>
@@ -296,6 +341,8 @@ export function OVDetalle({ toast }) {
       {d.cajas_detalle.length > 0 && !['en_preparacion', 'preparada'].includes(d.estatus) && (
         <section className="ov-panel"><h2 className="ov-h2">Cajas</h2><ListaCajas d={d} rol={rol} navigate={navigate} /></section>
       )}
+
+      <PanelArchivos d={d} rol={rol} toast={toast} />
 
       <section className="ov-panel">
         <h2 className="ov-h2">Historial y tiempos</h2>
@@ -410,6 +457,7 @@ function PanelSurtido({ d, rol, toast, recargar }) {
   return (
     <section className="ov-panel">
       <h2 className="ov-h2">Surtido</h2>
+      <Bloqueo op={d.operar && d.operar.surtido}>
       <Escaner etiqueta="Código del producto" onScan={escanear} />
       <div className="ov-lista-cab">
         <label className="ov-check"><input type="checkbox" checked={soloPend} onChange={e => setSoloPend(e.target.checked)} /> Mostrar solo lo pendiente ({falt.length})</label>
@@ -439,6 +487,7 @@ function PanelSurtido({ d, rol, toast, recargar }) {
           </tbody>
         </table>
       </div>
+      </Bloqueo>
       {modalFalt && <ModalMotivo titulo="Terminar surtido con faltantes" texto={`${falt.length} partida(s) quedan incompletas.`} boton="Terminar surtido" onClose={() => setModalFalt(false)} onOk={terminar} />}
     </section>
   )
@@ -451,7 +500,9 @@ function PanelListoParaPreparar({ d, toast, recargar }) {
       <h2 className="ov-h2">Lista para preparar</h2>
       <p>El surtido terminó{d.nota_faltantes ? ' con faltantes' : ' completo'}.</p>
       {d.nota_faltantes && <div className="ov-aviso">Faltantes ({falt.length} partidas): {d.nota_faltantes}</div>}
-      <button className="btn-principal" onClick={async () => { try { await api.ovPrepIniciar(d.id); await recargar() } catch (e) { toast(e.message, 'error') } }}>Iniciar preparación</button>
+      <Bloqueo op={d.operar && d.operar.prep}>
+        <button className="btn-principal" onClick={async () => { try { await api.ovPrepIniciar(d.id); await recargar() } catch (e) { toast(e.message, 'error') } }}>Iniciar preparación</button>
+      </Bloqueo>
     </section>
   )
 }
@@ -489,6 +540,7 @@ function PanelPreparacion({ d, rol, toast, recargar, setD, navigate }) {
   return (
     <section className="ov-panel">
       <h2 className="ov-h2">Preparación</h2>
+      <Bloqueo op={d.operar && d.operar.prep}>
       {!abierta && (
         <div className="ov-lista-cab">
           <span>{porEmpacar.length ? `Faltan ${nf(porEmpacar.reduce((a, l) => a + l.surtida - l.empacada, 0))} piezas por empacar.` : 'Todo está empacado.'}</span>
@@ -542,6 +594,7 @@ function PanelPreparacion({ d, rol, toast, recargar, setD, navigate }) {
           </table>
         </div>
       )}
+      </Bloqueo>
       {modalTerm && <ModalMotivo titulo="Terminar preparación" texto="Quedan piezas surtidas sin empacar." boton="Terminar" onClose={() => setModalTerm(false)}
         onOk={async (m) => { try { await api.ovPrepTerminar(d.id, m); setModalTerm(false); await recargar() } catch (e) { toast(e.message, 'error') } }} />}
     </section>
@@ -582,7 +635,11 @@ function PanelEntrega({ d, rol, toast, recargar, navigate }) {
   }
   const registrar = async () => {
     setEnv(true)
-    try { await api.ovEntregaRegistrar(d.id, { folio, archivo: arch, confirmar: conf }); toast('Entrega registrada', 'ok'); await recargar() }
+    try {
+      await api.ovEntregaRegistrar(d.id, { folio, archivo: arch, confirmar: conf })
+      if (arch) { try { await api.adjSubir(d.id, 'entrega_pdf', arch) } catch (e) { toast('La entrega se registró, pero no se pudo guardar el PDF: ' + e.message, 'error') } }
+      toast('Entrega registrada', 'ok'); await recargar()
+    }
     catch (e) { toast(e.message, 'error') } finally { setEnv(false) }
   }
   const sinConfirmar = val && !val.conciliacion.limpia && !conf
@@ -612,10 +669,24 @@ function PanelFactura({ d, rol, toast, recargar }) {
   const [env, setEnv] = useState(false)
   const [aviso, setAviso] = useState(null)
   const [conf, setConf] = useState(false)
+  const [xml, setXml] = useState(null)
+  const [cfdi, setCfdi] = useState(null)
   const puede = PUEDE_FACTURAR(rol)
+  const elegirXml = async (f) => {
+    setXml(f); setCfdi(null); setAviso(null); setConf(false)
+    if (!f) return
+    try { setCfdi(await api.leerCFDI(f)) } catch (e) { toast(e.message, 'error'); setXml(null) }
+  }
   const registrar = async () => {
     setEnv(true); setAviso(null)
-    try { await api.ovFacturaRegistrar(d.id, { folio, archivo: arch, confirmar: conf }); toast('Factura registrada', 'ok'); await recargar() }
+    try {
+      await api.ovFacturaRegistrar(d.id, { folio, archivo: arch, xml, confirmar: conf })
+      const fallas = []
+      if (arch) { try { await api.adjSubir(d.id, 'factura_pdf', arch) } catch (e) { fallas.push('PDF: ' + e.message) } }
+      if (xml) { try { await api.adjSubir(d.id, 'factura_xml', xml) } catch (e) { fallas.push('XML: ' + e.message) } }
+      if (fallas.length) toast('La factura se registró, pero no se guardó el archivo (' + fallas.join('; ') + ').', 'error'); else toast('Factura registrada', 'ok')
+      await recargar()
+    }
     catch (e) { if (/no coincide/i.test(e.message)) setAviso(e.message); else toast(e.message, 'error') } finally { setEnv(false) }
   }
   return (
@@ -628,11 +699,13 @@ function PanelFactura({ d, rol, toast, recargar }) {
       {!puede && <div className="ov-aviso">Pendiente: Facturación debe generar la factura con la entrega {d.entrega_folio}.</div>}
       {puede && (
         <div className="ov-form">
-          <label className="an-campo">PDF de la factura (opcional) <input type="file" accept="application/pdf" className="inp" onChange={e => { setArch(e.target.files[0]); setAviso(null); setConf(false) }} /></label>
-          <label className="an-campo">Folio de la factura <input className="inp" value={folio} onChange={e => setFolio(e.target.value)} placeholder="Si adjuntas el PDF se llena solo" /></label>
+          <label className="an-campo">PDF de la factura <input type="file" accept="application/pdf" className="inp" onChange={e => { setArch(e.target.files[0]); setAviso(null); setConf(false) }} /></label>
+          <label className="an-campo">XML de la factura (CFDI) <input type="file" accept=".xml,text/xml,application/xml" className="inp" onChange={e => elegirXml(e.target.files[0])} /></label>
+          {cfdi && <div className="ov-aviso ov-aviso--ok">XML leído: folio fiscal {cfdi.uuid || 'no encontrado'} | {(cfdi.serie + cfdi.folio) || 'sin folio'} | total ${new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2 }).format(cfdi.total)} {cfdi.moneda}</div>}
+          <label className="an-campo">Folio de la factura <input className="inp" value={folio} onChange={e => setFolio(e.target.value)} placeholder="Si adjuntas el PDF o el XML se llena solo" /></label>
           {aviso && <div className="ov-aviso ov-aviso--mal">{aviso}</div>}
           {aviso && <label className="ov-check"><input type="checkbox" checked={conf} onChange={e => setConf(e.target.checked)} /> Confirmo que es la factura correcta</label>}
-          <button className="btn-principal" disabled={(!folio.trim() && !arch) || env || (aviso && !conf)} onClick={registrar}>{env ? 'Guardando...' : 'Registrar factura'}</button>
+          <button className="btn-principal" disabled={(!folio.trim() && !arch && !xml) || env || (aviso && !conf)} onClick={registrar}>{env ? 'Guardando...' : 'Registrar factura'}</button>
         </div>
       )}
     </section>

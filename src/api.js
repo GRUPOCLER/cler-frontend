@@ -185,10 +185,41 @@ export const ovEntregaRegistrar = (id, { folio, archivo, confirmar }) => {
   if (archivo) fd.append('archivo', archivo)
   return reqForm(`/api/ov/${id}/entrega`, fd)
 }
-export const ovFacturaRegistrar = (id, { folio, archivo, confirmar }) => {
+export const ovFacturaRegistrar = (id, { folio, archivo, xml, confirmar }) => {
   const fd = new FormData(); fd.append('folio', folio || ''); fd.append('confirmar', confirmar ? 'true' : 'false')
   if (archivo) fd.append('archivo', archivo)
+  if (xml) fd.append('xml', xml)
   return reqForm(`/api/ov/${id}/factura`, fd)
+}
+export const leerCFDI = async (archivo) => (await import('./cfdi')).parsearCFDI(await archivo.text())
+
+// -- asignacion de responsables y tiempos --
+export const ovAsignar = (id, etapa, usuario) => post(`/api/ov/${id}/asignar`, { etapa, usuario: usuario || '' })
+export const asigTablero = () => req('/api/ov/asignacion/tablero')
+export const asigConfig = (exigir) => post('/api/ov/asignacion/config', { exigir: !!exigir })
+export const kpiTiempos = (desde, hasta) => req(`/api/ov/kpi/tiempos?desde=${encodeURIComponent(desde || '')}&hasta=${encodeURIComponent(hasta || '')}`)
+
+// -- adjuntos (PDF / XML guardados en la base) --
+const MAX_ADJ = 9 * 1024 * 1024
+export const adjListar = (ovId) => req(`/api/ov/${ovId}/adjuntos`)
+export const adjSubir = (ovId, tipo, archivo) => {
+  if (archivo.size > MAX_ADJ) return Promise.reject(new Error('El archivo pesa más de 9 MB.'))
+  const fd = new FormData(); fd.append('tipo', tipo); fd.append('archivo', archivo)
+  return reqForm(`/api/ov/${ovId}/adjuntos`, fd)
+}
+export const adjBorrar = (id) => req(`/api/ov/adjuntos/${id}`, { method: 'DELETE' })
+export const adjLeer = async (adj) => {
+  const id = typeof adj === 'object' ? adj.id : adj
+  const res = await fetch(API_URL + `/api/ov/adjuntos/${id}/contenido`, { headers: _token ? { Authorization: 'Bearer ' + _token } : {} })
+  if (res.status === 401) { logout(); window.location.reload(); return }
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Error ' + res.status) }
+  return { bytes: new Uint8Array(await res.arrayBuffer()) }
+}
+export function descargar(nombre, mime, bytes) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }))
+  const a = document.createElement('a')
+  a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 4000)
 }
 export const ovCancelar = (id, motivo) => post(`/api/ov/${id}/cancelar`, { cantidad: 0, motivo })
 export const ovCatalogoEstado = () => req('/api/ov/catalogo/estado')
@@ -394,3 +425,13 @@ export async function exportarUbicacionesCSV(params = {}) {
   a.remove()
   window.URL.revokeObjectURL(url)
 }
+
+// -- gestion del catalogo de productos --
+export const catGestionListar = ({ buscar = '', filtro = 'todos', pagina = 0 } = {}) =>
+  req(`/api/catalogo/gestion?buscar=${encodeURIComponent(buscar)}&filtro=${filtro}&pagina=${pagina}`)
+export const catGestionDetalle = (sku) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}`)
+export const catGestionEditar = (sku, campos, motivo) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}`, { method: 'PUT', body: JSON.stringify({ campos, motivo }) })
+export const catGestionAlta = (body) => req('/api/catalogo/gestion', { method: 'POST', body: JSON.stringify(body) })
+export const catGestionLiberar = (sku, campos) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}/liberar`, { method: 'POST', body: JSON.stringify({ campos }) })
+export const catAdicionalCrear = (sku, body) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}/adicionales`, { method: 'POST', body: JSON.stringify(body) })
+export const catAdicionalEditar = (id, body) => req(`/api/catalogo/gestion/adicionales/${id}`, { method: 'PUT', body: JSON.stringify(body) })

@@ -9,6 +9,9 @@ import AdminPanel from './AdminPanel.jsx'
 import ReimpresionesPanel from './ReimpresionesPanel.jsx'
 import Analisis from './Analisis.jsx'
 import ControlOV, { OVDetalle, OVEtiquetas } from './ControlOV.jsx'
+import Asignacion from './Asignacion.jsx'
+import Tiempos from './Tiempos.jsx'
+import Catalogo, { CatalogoDetalle } from './Catalogo.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -1785,6 +1788,7 @@ function Migaja() {
     if (pathname === '/nueva') partes.push('Nueva entrega')
     else if (pathname === '/reimpresiones') partes.push('Autorizaciones')
     else if (pathname === '/analisis') partes.push('Análisis')
+    else if (seg[0] === 'catalogo') { partes.push('Catálogo'); if (seg[1]) partes.push(decodeURIComponent(seg[1])) }
     else if (seg[0] === 'entregas' && seg[1]) {
       partes.push(seg[1])
       if (seg[2] === 'etiquetas') partes.push('Etiquetas de carga agrupada')
@@ -1961,6 +1965,8 @@ export default function App() {
                 onClick={() => navigate('/embarques')}>Entregas</button>
               <button className={'nav-btn' + (location.pathname === '/nueva' ? ' activo' : '')}
                 onClick={() => navigate('/nueva')}>Nueva entrega</button>
+              <button className={'nav-btn' + (location.pathname.startsWith('/catalogo') ? ' activo' : '')}
+                onClick={() => navigate('/catalogo')}>Catálogo</button>
               {api.esJefeEn('embarques') && (
                 <button className={'nav-btn' + (location.pathname === '/analisis' ? ' activo' : '')}
                   onClick={() => navigate('/analisis')}>Análisis</button>
@@ -2009,7 +2015,11 @@ export default function App() {
           <Route path="/reimpresiones" element={<SoloConAcceso modulo="embarques"><ReimpresionesPanel toast={toast} /></SoloConAcceso>} />
           <Route path="/analisis" element={api.esJefeEn('embarques') ? <Analisis toast={toast} /> : <Navigate to="/" replace />} />
           <Route path="/admin" element={(user?.es_admin || api.esGerenteAlguno()) ? <AdminPanel toast={toast} esAdmin={!!user?.es_admin} /> : <Navigate to="/" replace />} />
+          <Route path="/catalogo" element={<SoloConAcceso modulo="embarques"><Catalogo toast={toast} /></SoloConAcceso>} />
+          <Route path="/catalogo/:sku" element={<SoloConAcceso modulo="embarques"><CatalogoDetalle toast={toast} /></SoloConAcceso>} />
           <Route path="/ov" element={<SoloConAcceso modulo="refacciones"><ControlOV toast={toast} /></SoloConAcceso>} />
+          <Route path="/ov/asignacion" element={<SoloConAcceso modulo="refacciones"><Asignacion toast={toast} /></SoloConAcceso>} />
+          <Route path="/ov/tiempos" element={<SoloConAcceso modulo="refacciones"><Tiempos toast={toast} /></SoloConAcceso>} />
           <Route path="/ov/:id" element={<SoloConAcceso modulo="refacciones"><OVDetalle toast={toast} /></SoloConAcceso>} />
           <Route path="/ov/:id/etiquetas" element={<SoloConAcceso modulo="refacciones"><OVEtiquetas toast={toast} /></SoloConAcceso>} />
           <Route path="/inventario" element={<div className="contenedor"><div className="titulo-pag">Inventario y Operaciones</div><div className="sub-pag">Layout de ubicaciones y conteos de inventario. Este módulo todavía no está disponible aquí.</div></div>} />
