@@ -427,11 +427,29 @@ export async function exportarUbicacionesCSV(params = {}) {
 }
 
 // -- gestion del catalogo de productos --
-export const catGestionListar = ({ buscar = '', filtro = 'todos', pagina = 0 } = {}) =>
-  req(`/api/catalogo/gestion?buscar=${encodeURIComponent(buscar)}&filtro=${filtro}&pagina=${pagina}`)
+export const catGestionListar = ({ buscar = '', filtro = 'todos', linea = '', pagina = 0 } = {}) =>
+  req(`/api/catalogo/gestion?buscar=${encodeURIComponent(buscar)}&filtro=${filtro}&linea=${linea}&pagina=${pagina}`)
 export const catGestionDetalle = (sku) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}`)
 export const catGestionEditar = (sku, campos, motivo) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}`, { method: 'PUT', body: JSON.stringify({ campos, motivo }) })
 export const catGestionAlta = (body) => req('/api/catalogo/gestion', { method: 'POST', body: JSON.stringify(body) })
 export const catGestionLiberar = (sku, campos) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}/liberar`, { method: 'POST', body: JSON.stringify({ campos }) })
 export const catAdicionalCrear = (sku, body) => req(`/api/catalogo/gestion/${encodeURIComponent(sku)}/adicionales`, { method: 'POST', body: JSON.stringify(body) })
 export const catAdicionalEditar = (id, body) => req(`/api/catalogo/gestion/adicionales/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+
+// --- Catalogo: Odoo vs hoja, sincronizacion y exportacion ---
+export const catOdooComparar = ({ estado = 'diferencias', buscar = '', pagina = 0 } = {}) =>
+  req(`/api/catalogo/gestion/odoo/comparar?estado=${estado}&buscar=${encodeURIComponent(buscar)}&pagina=${pagina}`)
+export const catOdooEstado = () => req('/api/catalogo/gestion/odoo/estado')
+export const catOdooSincronizar = () => req('/api/catalogo/gestion/odoo/sincronizar', { method: 'POST' })
+export const catOdooDiagnostico = (sku = '') => req(`/api/catalogo/gestion/odoo/diagnostico?sku=${encodeURIComponent(sku)}`)
+export const catExportar = async (tipo, incluir = 'faltantes') => {
+  const res = await fetch(API_URL + `/api/catalogo/gestion/exportar/${tipo}?incluir=${incluir}`, { headers: _token ? { Authorization: 'Bearer ' + _token } : {} })
+  if (res.status === 401) { logout(); window.location.reload(); return }
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Error ' + res.status) }
+  descargar(`${tipo}.csv`, 'text/csv', new Uint8Array(await res.arrayBuffer()))
+}
+
+export const catImportarRefacciones = (archivo, simular) => {
+  const fd = new FormData(); fd.append('archivo', archivo)
+  return reqForm(`/api/catalogo/gestion/importar-refacciones?simular=${simular ? 'true' : 'false'}`, fd)
+}

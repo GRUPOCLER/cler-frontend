@@ -1,3 +1,4 @@
+import { tieneModulo } from './api.js'
 // Modulos del sistema (espejo de services/permisos.py en el backend).
 // El backend es quien decide el acceso; esto solo ordena la interfaz.
 export const MODULOS = [
@@ -27,6 +28,11 @@ export const moduloPorId = (id) => MODULOS.find(m => m.id === id)
 export function moduloDeRuta(pathname) {
   if (pathname === '/' ) return 'hub'
   if (pathname.startsWith('/ov')) return 'refacciones'
+  if (pathname.startsWith('/catalogo')) {
+    // El catalogo es compartido: quien solo tiene Refacciones lo ve dentro de ese modulo
+    const refac = tieneModulo('refacciones') && (!tieneModulo('embarques') || /linea=refacciones/.test(window.location.search))
+    return refac ? 'refacciones' : 'embarques'
+  }
   if (pathname.startsWith('/inventario')) return 'inventario'
   if (pathname.startsWith('/admin')) return 'admin'
   return 'embarques'

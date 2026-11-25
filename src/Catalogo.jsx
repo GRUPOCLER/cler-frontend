@@ -6,6 +6,8 @@ import * as api from './api'
 import { fechaHora, nf } from './util'
 import { Modal } from './ControlOV'
 
+const LINEAS = [['', 'Todos'], ['equipos', 'Equipos'], ['refacciones', 'Refacciones']]
+
 const FILTROS = [
   ['todos', 'Todos', 'total'],
   ['sin_master', 'Sin caja master', 'sin_master'],
@@ -13,7 +15,7 @@ const FILTROS = [
   ['con_adicionales', 'Con adicionales', 'con_adicionales'],
 ]
 const TIPOS = [['extension', 'Extensión'], ['adicional', 'Adicional'], ['accesorio', 'Accesorio']]
-const ORIGEN = { manual: 'Edición', hoja: 'Hoja', alta: 'Alta', adicional: 'Adicional' }
+const ORIGEN = { manual: 'Edición', hoja: 'Hoja', odoo: 'Odoo', alta: 'Alta', adicional: 'Adicional' }
 
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(String(v).replace(',', '.')))
 const med = (a, b, c) => (a && b && c ? `${nf(a)} x ${nf(b)} x ${nf(c)}` : '-')
@@ -26,15 +28,21 @@ export default function Catalogo({ toast }) {
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
   const [filtro, setFiltro] = useState('todos')
+  const [linea, setLinea] = useState(() => {
+    const p = new URLSearchParams(window.location.search).get('linea')
+    if (p) return p
+    return api.tieneModulo('embarques') ? '' : 'refacciones'
+  })
   const [pagina, setPagina] = useState(0)
   const [nuevo, setNuevo] = useState(false)
+  const [importar, setImportar] = useState(false)
 
   const cargar = useCallback(() => {
-    api.catGestionListar({ buscar: q, filtro, pagina })
+    api.catGestionListar({ buscar: q, filtro, linea, pagina })
       .then(x => { setD(x); setError(null) }).catch(e => setError(e.message))
-  }, [q, filtro, pagina])
+  }, [q, filtro, linea, pagina])
   useEffect(() => { const t = setTimeout(cargar, 250); return () => clearTimeout(t) }, [cargar])
-  useEffect(() => { setPagina(0) }, [q, filtro])
+  useEffect(() => { setPagina(0) }, [q, filtro, linea])
 
   const puede = d?.puede_editar
   const paginas = d ? Math.max(1, Math.ceil(d.total / d.limite)) : 1
@@ -46,9 +54,20 @@ export default function Catalogo({ toast }) {
           <div className="titulo-pag">Catálogo de productos</div>
           <div className="sub-pag">Pesos, medidas, caja master y empaques adicionales. Los cambios se guardan aquí y no se envían a Odoo.</div>
         </div>
-        {puede && <button className="btn-principal" onClick={() => setNuevo(true)}>Nuevo producto</button>}
+        <div className="cg-acciones">
+          {puede && <button className="btn-sec" onClick={() => setImportar(true)}>Importar pesos de refacciones</button>}
+          <button className="btn-sec" onClick={() => navigate('/catalogo/odoo')}>Odoo contra hoja</button>
+          {puede && <button className="btn-principal" onClick={() => setNuevo(true)}>Nuevo producto</button>}
+        </div>
       </div>
 
+      <div className="cg-barra">
+        <div className="seg-ctl" role="tablist" aria-label="Línea">
+          {LINEAS.map(([id, nom]) => (
+            <button key={id} role="tab" aria-selected={linea === id} className={'seg-btn' + (linea === id ? ' on' : '')} onClick={() => setLinea(id)}>{nom}</button>
+          ))}
+        </div>
+      </div>
       <div className="cg-barra">
         <div className="seg-ctl" role="tablist" aria-label="Filtro">
           {FILTROS.map(([id, nom, k]) => (
@@ -94,8 +113,48 @@ export default function Catalogo({ toast }) {
           </div>
         )}
       </div>
+      {importar && <ModalImportar toast={toast} onClose={() => setImportar(false)} onListo={() => { setLinea('refacciones'); cargar() }} />}
       {nuevo && <ModalNuevo toast={toast} onClose={() => setNuevo(false)} onCreado={(sku) => navigate('/catalogo/' + encodeURIComponent(sku))} />}
     </div>
+  )
+}
+
+function ModalImportar({ onClose, onListo, toast }) {
+  const [arch, setArch] = useState(null)
+  const [rep, setRep] = useState(null)
+  const [env, setEnv] = useState(false)
+  const [error, setError] = useState(null)
+
+  const correr = async (simular) => {
+    setEnv(true); setError(null)
+    try {
+      const r = await api.catImportarRefacciones(arch, simular)
+      setRep(r)
+      if (!simular) { toast?.('Importación lista', 'ok'); onListo() }
+    } catch (e) { setError(e.message) } finally { setEnv(false) }
+  }
+  const guardado = rep && !rep.simulacion
+  return (
+    <Modal titulo="Importar pesos de refacciones" sub="Archivo de pesos y dimensiones (hoja CONSOLIDADO). Solo se guarda en esta plataforma; Odoo no se modifica." onClose={onClose}>
+      <div className="cg-nota">Columnas: CODIGO, DESCRIPCION, PESO (en gramos, se convierte a kg), LARGO, ANCHO y ALTO (cm). Lo que editaste aquí y lo que ya viene de Odoo no se pisa.</div>
+      <label className="an-campo">Archivo .xlsx
+        <input type="file" accept=".xlsx" className="inp" onChange={e => { setArch(e.target.files[0] || null); setRep(null); setError(null) }} />
+      </label>
+      {error && <div className="ov-aviso ov-aviso--mal">{error}</div>}
+      {rep && (
+        <div className="ov-aviso">
+          <div>{rep.simulacion ? 'Simulación (no se guardó nada)' : 'Importado'}: {nf(rep.total_filas)} filas, {nf(rep.insertados)} nuevas, {nf(rep.actualizados)} actualizadas.</div>
+          {rep.campos_protegidos > 0 && <div>{nf(rep.campos_protegidos)} datos editados aquí se conservaron.</div>}
+          {rep.total_avisos > 0 && <div>{nf(rep.total_avisos)} avisos, por ejemplo: {rep.avisos.slice(0, 3).join('; ')}</div>}
+        </div>
+      )}
+      <div className="cg-guardar">
+        <button className="btn-sec" disabled={!arch || env} onClick={() => correr(true)}>Simular</button>
+        {guardado
+          ? <button className="btn-principal" onClick={onClose}>Cerrar</button>
+          : <button className="btn-principal" disabled={!arch || env || !rep || !rep.simulacion} onClick={() => correr(false)}>Importar y guardar</button>}
+      </div>
+    </Modal>
   )
 }
 
@@ -214,7 +273,7 @@ export function CatalogoDetalle({ toast }) {
           <div className="cg-form cg-grid">
             {g.campos.map(([k, nom, tipo, ancho]) => (
               <label key={k} className={'an-campo' + (ancho ? ' cg-ancho' : '')}>
-                <span>{nom}{it.campos_manuales.includes(k) && <> <span className="chip chip-ok">Editado aquí</span></>}</span>
+                <span>{nom}{it.campos_manuales.includes(k) ? <> <span className="chip chip-ok">Editado aquí</span></> : (it.fuentes?.[k] && it.fuentes[k] !== 'sin_dato') ? <> <span className="chip">{it.fuentes[k] === 'odoo' ? 'Odoo' : 'Hoja'}</span></> : null}</span>
                 <input className="inp" disabled={!puede} value={valor(k)} inputMode={tipo === 'txt' ? 'text' : 'decimal'}
                   onChange={e => setForma(f => ({ ...f, [k]: e.target.value }))} />
                 {puede && it.campos_manuales.includes(k) && <button type="button" className="cg-link" onClick={() => liberar(k)}>Devolver a la hoja</button>}

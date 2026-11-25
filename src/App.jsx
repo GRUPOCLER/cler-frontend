@@ -12,6 +12,7 @@ import ControlOV, { OVDetalle, OVEtiquetas } from './ControlOV.jsx'
 import Asignacion from './Asignacion.jsx'
 import Tiempos from './Tiempos.jsx'
 import Catalogo, { CatalogoDetalle } from './Catalogo.jsx'
+import CatalogoOdoo from './CatalogoOdoo.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
 // ── MODAL: MOTIVO DE REIMPRESION ──────────────────────────
@@ -1836,7 +1837,8 @@ function Inicio({ user }) {
 }
 
 function SoloConAcceso({ modulo, children }) {
-  return api.tieneModulo(modulo) ? children : <Navigate to="/" replace />
+  const mods = Array.isArray(modulo) ? modulo : [modulo]
+  return mods.some(m => api.tieneModulo(m)) ? children : <Navigate to="/" replace />
 }
 
 // ── APP ──────────────────────────────────────────────────
@@ -1983,6 +1985,8 @@ export default function App() {
               <span className="nav-modulo">Refacciones</span>
               <button className={'nav-btn' + (location.pathname === '/ov' ? ' activo' : '')}
                 onClick={() => navigate('/ov')}>Control de OV</button>
+              <button className={'nav-btn' + (location.pathname.startsWith('/catalogo') ? ' activo' : '')}
+                onClick={() => navigate('/catalogo?linea=refacciones')}>Catálogo</button>
             </>}
             {seccion === 'inventario' && <span className="nav-modulo">Inventario y Operaciones</span>}
             {(user?.es_admin || api.esGerenteAlguno()) && (
@@ -2015,8 +2019,9 @@ export default function App() {
           <Route path="/reimpresiones" element={<SoloConAcceso modulo="embarques"><ReimpresionesPanel toast={toast} /></SoloConAcceso>} />
           <Route path="/analisis" element={api.esJefeEn('embarques') ? <Analisis toast={toast} /> : <Navigate to="/" replace />} />
           <Route path="/admin" element={(user?.es_admin || api.esGerenteAlguno()) ? <AdminPanel toast={toast} esAdmin={!!user?.es_admin} /> : <Navigate to="/" replace />} />
-          <Route path="/catalogo" element={<SoloConAcceso modulo="embarques"><Catalogo toast={toast} /></SoloConAcceso>} />
-          <Route path="/catalogo/:sku" element={<SoloConAcceso modulo="embarques"><CatalogoDetalle toast={toast} /></SoloConAcceso>} />
+          <Route path="/catalogo" element={<SoloConAcceso modulo={['embarques', 'refacciones']}><Catalogo toast={toast} /></SoloConAcceso>} />
+          <Route path="/catalogo/odoo" element={<SoloConAcceso modulo={['embarques', 'refacciones']}><CatalogoOdoo toast={toast} /></SoloConAcceso>} />
+          <Route path="/catalogo/:sku" element={<SoloConAcceso modulo={['embarques', 'refacciones']}><CatalogoDetalle toast={toast} /></SoloConAcceso>} />
           <Route path="/ov" element={<SoloConAcceso modulo="refacciones"><ControlOV toast={toast} /></SoloConAcceso>} />
           <Route path="/ov/asignacion" element={<SoloConAcceso modulo="refacciones"><Asignacion toast={toast} /></SoloConAcceso>} />
           <Route path="/ov/tiempos" element={<SoloConAcceso modulo="refacciones"><Tiempos toast={toast} /></SoloConAcceso>} />

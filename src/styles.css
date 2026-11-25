@@ -963,3 +963,4 @@ line.an-grid{stroke:var(--border);stroke-width:1;}
 .cg-form .inp:disabled{opacity:.7;}
 @media (max-width:760px){.cg-grid{grid-template-columns:1fr 1fr}.cg-fila4{grid-template-columns:1fr 1fr}.cg-guardar{flex-direction:column;align-items:stretch}}
 .ov-aviso--warn{border-left-color:var(--warning);background:var(--warning-soft);}
+.cg-acciones{display:flex;gap:8px;flex-wrap:wrap;}
