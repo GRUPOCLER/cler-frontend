@@ -12,6 +12,7 @@ import ControlOV, { OVDetalle, OVEtiquetas } from './ControlOV.jsx'
 import Asignacion from './Asignacion.jsx'
 import Tiempos from './Tiempos.jsx'
 import Catalogo, { CatalogoDetalle } from './Catalogo.jsx'
+import Inventario from './Inventario'
 import CatalogoOdoo from './CatalogoOdoo.jsx'
 
 // ── TOAST ────────────────────────────────────────────────
@@ -1988,7 +1989,13 @@ export default function App() {
               <button className={'nav-btn' + (location.pathname.startsWith('/catalogo') ? ' activo' : '')}
                 onClick={() => navigate('/catalogo?linea=refacciones')}>Catálogo</button>
             </>}
-            {seccion === 'inventario' && <span className="nav-modulo">Inventario y Operaciones</span>}
+            {seccion === 'inventario' && <>
+              <span className="nav-modulo">Inventario y Operaciones</span>
+              <button className={'nav-btn' + (!location.pathname.startsWith('/inventario/conteos') && location.pathname !== '/inventario/admin' ? ' activo' : '')}
+                onClick={() => navigate('/inventario')}>Mapa y existencias</button>
+              {api.nivelInv() >= 2 && <button className={'nav-btn' + (location.pathname.startsWith('/inventario/conteos') ? ' activo' : '')}
+                onClick={() => navigate('/inventario/conteos')}>Conteos</button>}
+            </>}
             {(user?.es_admin || api.esGerenteAlguno()) && (
               <button className={'nav-btn' + (seccion === 'admin' ? ' activo' : '')}
                 onClick={() => navigate('/admin')}>
@@ -2027,7 +2034,9 @@ export default function App() {
           <Route path="/ov/tiempos" element={<SoloConAcceso modulo="refacciones"><Tiempos toast={toast} /></SoloConAcceso>} />
           <Route path="/ov/:id" element={<SoloConAcceso modulo="refacciones"><OVDetalle toast={toast} /></SoloConAcceso>} />
           <Route path="/ov/:id/etiquetas" element={<SoloConAcceso modulo="refacciones"><OVEtiquetas toast={toast} /></SoloConAcceso>} />
-          <Route path="/inventario" element={<div className="contenedor"><div className="titulo-pag">Inventario y Operaciones</div><div className="sub-pag">Layout de ubicaciones y conteos de inventario. Este módulo todavía no está disponible aquí.</div></div>} />
+          <Route path="/inventario" element={<SoloConAcceso modulo="inventario"><Inventario toast={toast} /></SoloConAcceso>} />
+          <Route path="/inventario/conteos/:id" element={<SoloConAcceso modulo="inventario"><Inventario toast={toast} /></SoloConAcceso>} />
+          <Route path="/inventario/:seccion" element={<SoloConAcceso modulo="inventario"><Inventario toast={toast} /></SoloConAcceso>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

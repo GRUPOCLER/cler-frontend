@@ -5,9 +5,9 @@ export const MODULOS = [
   { id: 'embarques',   nombre: 'Embarques',                ruta: '/embarques', disponible: true,
     desc: 'Entregas, tarimas, cargas sueltas, listas de empaque y análisis.',
     roles: ['operador', 'gerente'] },
-  { id: 'inventario',  nombre: 'Inventario y Operaciones', ruta: '/inventario', disponible: false,
-    desc: 'Layout de ubicaciones y conteos de inventario.',
-    roles: ['operador', 'gerente'] },
+  { id: 'inventario',  nombre: 'Inventario y Operaciones', ruta: '/inventario', disponible: true,
+    desc: 'Mapa de ubicaciones, existencias de Odoo y conteos de inventario con auditoria.',
+    roles: ['operador', 'auditor', 'gerente'] },
   { id: 'refacciones', nombre: 'Refacciones',              ruta: '/ov', disponible: true,
     desc: 'Control de OV: surtido, preparación, entrega SAP, factura y etiquetas.',
     roles: ['operador', 'gerente', 'sap', 'facturacion'] },
@@ -15,6 +15,7 @@ export const MODULOS = [
 
 export const ROLES = {
   operador:    { nombre: 'Operador',      desc: 'Opera el módulo; sin reimpresión, reapertura ni cancelación' },
+  auditor:     { nombre: 'Auditor',       desc: 'Cuenta las ubicaciones asignadas y reporta incidencias' },
   gerente:     { nombre: 'Gerente',       desc: 'Jefatura del módulo: autoriza, reabre, reimprime y registra operadores' },
   sap:         { nombre: 'Encargado SAP', desc: 'Carga las OV y registra la entrega en SAP' },
   facturacion: { nombre: 'Facturación',   desc: 'Registra la factura' },

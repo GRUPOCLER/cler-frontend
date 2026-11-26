@@ -453,3 +453,14 @@ export const catImportarRefacciones = (archivo, simular) => {
   const fd = new FormData(); fd.append('archivo', archivo)
   return reqForm(`/api/catalogo/gestion/importar-refacciones?simular=${simular ? 'true' : 'false'}`, fd)
 }
+
+// --- Inventario y Operaciones (conteos, mapa, existencias de Odoo en solo lectura) ---
+const INV = '/api/inventario'
+export const inv = {
+  get: (p) => req(INV + p),
+  post: (p, body) => req(INV + p, { method: 'POST', body: JSON.stringify(body || {}) }),
+  archivo: (p, archivo) => { const fd = new FormData(); fd.append('archivo', archivo); return reqForm(INV + p, fd) },
+  csv: async (p) => { const r = await req(INV + p); descargar(r.nombre, 'text/csv;charset=utf-8', new TextEncoder().encode(r.csv)) },
+}
+export const rolInv = () => rolEn('inventario')
+export const nivelInv = () => ({ admin: 3, gerente: 3, auditor: 2, operador: 1 }[rolEn('inventario')] || 0)
