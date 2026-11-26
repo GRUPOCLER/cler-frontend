@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 export const ORDEN = ['recibida', 'en_surtido', 'surtida', 'en_preparacion', 'preparada', 'entregada_sap', 'facturada']
 export const NOMBRE = {
   recibida: 'Recibida', en_surtido: 'En surtido', surtida: 'Surtida', en_preparacion: 'En preparación',
-  preparada: 'Preparada', entregada_sap: 'Entrega generada', facturada: 'Facturada', cancelada: 'Cancelada',
+  preparada: 'Entrega en sistema pendiente', entregada_sap: 'Entrega generada, espera de facturación', facturada: 'Facturada', cancelada: 'Cancelada',
 }
 export const TONO = {
   recibida: 'neutro', en_surtido: 'activo', surtida: 'neutro', en_preparacion: 'activo',

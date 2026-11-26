@@ -525,6 +525,70 @@ function ListaCajas({ d, rol, navigate, onReabrir }) {
   )
 }
 
+// Partidas pendientes de empacar: pasar a la caja abierta todo, una parte o varias partidas a la vez.
+function PorEmpacar({ lineas, abierta, onAsignar }) {
+  const [sel, setSel] = useState({})        // linea_id -> true
+  const [cant, setCant] = useState({})      // linea_id -> texto (cantidad parcial)
+  const [fb, setFb] = useState(null)
+  const [env, setEnv] = useState(false)
+  const [filtro, setFiltro] = useState('')
+  const pend = (l) => l.surtida - l.empacada
+  const f = filtro.trim().toUpperCase()
+  const vis = f ? lineas.filter(l => (l.codigo + ' ' + (l.descripcion || '')).toUpperCase().includes(f)) : lineas
+  const ids = vis.map(l => l.id)
+  const marcadas = lineas.filter(l => sel[l.id])
+  const todasMarcadas = ids.length > 0 && ids.every(id => sel[id])
+  const tot = lineas.reduce((a, l) => a + pend(l), 0)
+  const q = (l) => { const n = parseInt(cant[l.id]); return Number.isFinite(n) && n > 0 ? Math.min(n, pend(l)) : null }
+  const go = async (items, todo, texto) => {
+    if (env) return
+    setEnv(true)
+    try { await onAsignar(items, todo); setFb({ ok: true, texto }); setSel({}); setCant({}) } catch (e) { setFb({ ok: false, texto: e.message }) } finally { setEnv(false) }
+  }
+  const marca = (id, v) => setSel(s => ({ ...s, [id]: v }))
+  return (
+    <div className="ov-porempacar">
+      <div className="ov-lista-cab">
+        <h3 className="ov-h3" style={{ margin: 0 }}>Por empacar ({lineas.length} partidas, {nf(tot)} piezas)</h3>
+        {abierta && lineas.length > 0 && <button className="btn-sec" disabled={env} onClick={() => go([], true, `Todo lo pendiente pasó a la caja ${abierta.numero}`)}>Pasar todo a la caja {abierta.numero}</button>}
+      </div>
+      {lineas.length === 0 ? <p className="an-nota">Nada pendiente.</p> : (<>
+        {!abierta && <p className="an-nota">Abre una caja para pasar piezas a ella.</p>}
+        {abierta && (
+          <div className="ov-pe-barra">
+            <input className="inp" placeholder="Filtrar por código o descripción" value={filtro} onChange={e => setFiltro(e.target.value)} aria-label="Filtrar partidas" />
+            <button className="btn-sec" disabled={env || marcadas.length === 0} onClick={() => go(marcadas.map(l => ({ linea_id: l.id, cantidad: q(l) })), false, `${marcadas.length} partida(s) pasaron a la caja ${abierta.numero}`)}>
+              Pasar {marcadas.length ? marcadas.length + ' seleccionada(s)' : 'seleccionadas'}
+            </button>
+          </div>
+        )}
+        <div className={'ov-fb' + (fb ? (fb.ok ? ' ov-fb--ok' : ' ov-fb--mal') : '')} role="status" aria-live="polite">{fb ? fb.texto : ' '}</div>
+        <div className="an-tabla-wrap">
+          <table className="an-tabla">
+            <thead><tr>
+              {abierta && <th style={{ width: 40 }}><input type="checkbox" checked={todasMarcadas} onChange={e => setSel(Object.fromEntries(ids.map(id => [id, e.target.checked])))} aria-label="Seleccionar todas" /></th>}
+              <th>Código</th><th>Descripción</th><th>Categoría</th><th className="num">Por empacar</th>{abierta && <th className="num">Cantidad</th>}{abierta && <th />}
+            </tr></thead>
+            <tbody>
+              {vis.map(l => (
+                <tr key={l.id}>
+                  {abierta && <td><input type="checkbox" checked={!!sel[l.id]} onChange={e => marca(l.id, e.target.checked)} aria-label={'Seleccionar ' + l.codigo} /></td>}
+                  <td className="an-folio">{l.codigo}</td><td>{l.descripcion}</td><td>{l.division}</td><td className="num">{nf(pend(l))}</td>
+                  {abierta && <td className="num"><input className="inp ov-pe-cant" type="number" min="1" max={pend(l)} placeholder={String(pend(l))} value={cant[l.id] || ''} onChange={e => { setCant(c => ({ ...c, [l.id]: e.target.value })); if (e.target.value) marca(l.id, true) }} aria-label={'Cantidad de ' + l.codigo} /></td>}
+                  {abierta && <td className="ov-acc">
+                    <button className="btn-mini" disabled={env} onClick={() => go([{ linea_id: l.id, cantidad: 1 }], false, `${l.codigo}: +1`)}>+1</button>
+                    <button className="btn-mini" disabled={env} onClick={() => go([{ linea_id: l.id, cantidad: q(l) }], false, `${l.codigo}: ${nf(q(l) || pend(l))} pieza(s) a la caja ${abierta.numero}`)}>{q(l) ? 'Pasar ' + q(l) : 'Pasar todo'}</button>
+                  </td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>)}
+    </div>
+  )
+}
+
 function PanelPreparacion({ d, rol, toast, recargar, setD, navigate }) {
   const abierta = d.cajas_detalle.find(c => c.estatus === 'abierta')
   const [peso, setPeso] = useState('')
@@ -536,6 +600,11 @@ function PanelPreparacion({ d, rol, toast, recargar, setD, navigate }) {
     setD(r)
     const l = r.lineas.find(x => x.codigo.replace(/[\s_]/g, '').toUpperCase() === cod.replace(/[*\s_]/g, '').toUpperCase())
     return l ? `${l.codigo}: ${nf(l.empacada)} de ${nf(l.surtida)} empacadas` : 'Agregado'
+  }
+  const asignar = async (items, todo) => {
+    const r = await api.ovCajaAsignar(d.id, abierta.id, items, todo)
+    setD(r)
+    return r
   }
   return (
     <section className="ov-panel">
@@ -569,6 +638,8 @@ function PanelPreparacion({ d, rol, toast, recargar, setD, navigate }) {
             <label className="an-campo">Peso real en kg (opcional)
               <input className="inp" type="number" min="0" step="0.1" value={peso} onChange={e => setPeso(e.target.value)} />
             </label>
+            {abierta.piezas > 0 && <button className="btn-sec" onClick={() => run(async () => setD(await api.ovCajaVaciar(d.id, abierta.id)), 'Caja vaciada')}>Vaciar caja</button>}
+            {porEmpacar.length > 0 && <button className="btn-sec" disabled={abierta.piezas < 1} onClick={() => run(async () => { await api.ovCajaCerrar(d.id, abierta.id, parseFloat(peso) || null); setPeso(''); setD(await (async () => { await api.ovCajaNueva(d.id); return api.ovDetalle(d.id) })()) }, `Caja ${abierta.numero} cerrada, nueva caja abierta`)}>Cerrar y abrir siguiente</button>}
             <button className="btn-principal" disabled={abierta.piezas < 1} onClick={() => run(async () => { setD(await api.ovCajaCerrar(d.id, abierta.id, parseFloat(peso) || null)); setPeso('') }, `Caja ${abierta.numero} cerrada`)}>Cerrar caja {abierta.numero}</button>
           </div>
         </div>
@@ -585,15 +656,7 @@ function PanelPreparacion({ d, rol, toast, recargar, setD, navigate }) {
           : <p className="an-nota">Para terminar con piezas sin empacar se requiere un gerente.</p>
       )}
 
-      <h3 className="ov-h3">Por empacar ({porEmpacar.length} partidas)</h3>
-      {porEmpacar.length === 0 ? <p className="an-nota">Nada pendiente.</p> : (
-        <div className="an-tabla-wrap">
-          <table className="an-tabla">
-            <thead><tr><th>Código</th><th>Descripción</th><th>Categoría</th><th className="num">Por empacar</th></tr></thead>
-            <tbody>{porEmpacar.map(l => <tr key={l.id}><td className="an-folio">{l.codigo}</td><td>{l.descripcion}</td><td>{l.division}</td><td className="num">{nf(l.surtida - l.empacada)}</td></tr>)}</tbody>
-          </table>
-        </div>
-      )}
+      <PorEmpacar lineas={porEmpacar} abierta={abierta} onAsignar={asignar} />
       </Bloqueo>
       {modalTerm && <ModalMotivo titulo="Terminar preparación" texto="Quedan piezas surtidas sin empacar." boton="Terminar" onClose={() => setModalTerm(false)}
         onOk={async (m) => { try { await api.ovPrepTerminar(d.id, m); setModalTerm(false); await recargar() } catch (e) { toast(e.message, 'error') } }} />}
@@ -626,37 +689,51 @@ function PanelEntrega({ d, rol, toast, recargar, navigate }) {
   const [arch, setArch] = useState(null)
   const [val, setVal] = useState(null)
   const [conf, setConf] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [sinPdf, setSinPdf] = useState(false)
   const [env, setEnv] = useState(false)
   const puede = PUEDE_CARGAR(rol)
+  const jefe = ES_JEFE(rol)
   const validar = async (f) => {
-    setArch(f); setVal(null); setConf(false)
+    setArch(f); setVal(null); setConf(false); setMotivo('')
     if (!f) return
-    try { const v = await api.ovEntregaValidar(d.id, f); setVal(v); setFolio(v.folio) } catch (e) { toast(e.message, 'error') }
+    try { const v = await api.ovEntregaValidar(d.id, f); setVal(v); setFolio(v.folio) } catch (e) { toast(e.message, 'error'); setArch(null) }
   }
   const registrar = async () => {
     setEnv(true)
     try {
-      await api.ovEntregaRegistrar(d.id, { folio, archivo: arch, confirmar: conf })
-      if (arch) { try { await api.adjSubir(d.id, 'entrega_pdf', arch) } catch (e) { toast('La entrega se registró, pero no se pudo guardar el PDF: ' + e.message, 'error') } }
-      toast('Entrega registrada', 'ok'); await recargar()
+      await api.ovEntregaRegistrar(d.id, { folio, archivo: sinPdf ? null : arch, confirmar: conf, motivo })
+      toast('Entrega generada. La OV queda en espera de facturación.', 'ok'); await recargar()
     }
     catch (e) { toast(e.message, 'error') } finally { setEnv(false) }
   }
-  const sinConfirmar = val && !val.conciliacion.limpia && !conf
+  const necesitaAut = val && !val.corresponde
+  const autorizada = conf && motivo.trim().length >= 5
+  const listo = sinPdf ? (jefe && folio.trim() && motivo.trim().length >= 5) : (val && (val.corresponde || (val.puede_autorizar && autorizada)))
   return (
     <section className="ov-panel">
-      <h2 className="ov-h2">Entrega en SAP</h2>
-      <p>La mercancía está preparada en {d.cajas} caja(s). El encargado de SAP genera la entrega y registra aquí el folio.</p>
+      <h2 className="ov-h2">Entrega en sistema pendiente</h2>
+      <p>La mercancía está preparada en {d.cajas} caja(s). Para continuar, adjunta el PDF de la entrega ya generada en SAP: se valida contra lo preparado y, si corresponde, la OV pasa a espera de facturación.</p>
       <div className="ov-acc"><button className="btn-sec" onClick={() => navigate(`/ov/${d.id}/etiquetas`)}>Etiquetas de cajas</button></div>
       <ListaCajas d={d} rol={rol} navigate={navigate} />
-      {!puede && <div className="ov-aviso">Pendiente: el encargado de SAP debe generar la entrega.</div>}
+      {!puede && <div className="ov-aviso">Pendiente: el encargado de SAP debe generar la entrega y adjuntar su PDF.</div>}
       {puede && (
         <div className="ov-form">
-          <label className="an-campo">PDF de la entrega (informe de lotes) <input type="file" accept="application/pdf" className="inp" onChange={e => validar(e.target.files[0])} /></label>
-          <label className="an-campo">Folio de la entrega <input className="inp" value={folio} onChange={e => setFolio(e.target.value)} placeholder="Ej. 107810" /></label>
-          {val && <Conciliacion v={val} />}
-          {val && !val.conciliacion.limpia && <label className="ov-check"><input type="checkbox" checked={conf} onChange={e => setConf(e.target.checked)} /> Revisé las diferencias y son correctas</label>}
-          <button className="btn-principal" disabled={!folio.trim() || sinConfirmar || env} onClick={registrar}>{env ? 'Guardando...' : 'Registrar entrega'}</button>
+          {!sinPdf && <label className="an-campo">PDF de la entrega (informe de lotes de SAP) <input type="file" accept="application/pdf" className="inp" onChange={e => validar(e.target.files[0])} /></label>}
+          {!sinPdf && val && <Conciliacion v={val} />}
+          {!sinPdf && val && !val.cliente_coincide && <div className="ov-aviso ov-aviso--mal">El cliente de la entrega ({val.cliente}) no es el de la OV.</div>}
+          {!sinPdf && necesitaAut && !val.puede_autorizar && <div className="ov-aviso ov-aviso--mal">La entrega no corresponde a la OV. Solo un gerente puede autorizarla; avísale para que la valide.</div>}
+          {!sinPdf && necesitaAut && val.puede_autorizar && (<>
+            <label className="ov-check"><input type="checkbox" checked={conf} onChange={e => setConf(e.target.checked)} /> Revisé las diferencias y autorizo registrar la entrega</label>
+            <label className="an-campo">Motivo de la autorización <input className="inp" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej. El cliente aceptó entrega parcial" /></label>
+          </>)}
+          {sinPdf && (<>
+            <div className="ov-aviso ov-aviso--mal">Excepción de gerente: se registra sin PDF y queda asentado en el historial.</div>
+            <label className="an-campo">Folio de la entrega <input className="inp" value={folio} onChange={e => setFolio(e.target.value)} placeholder="Ej. 107810" /></label>
+            <label className="an-campo">Motivo <input className="inp" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Por qué no se adjunta el PDF" /></label>
+          </>)}
+          <button className="btn-principal" disabled={!listo || env} onClick={registrar}>{env ? 'Guardando...' : 'Registrar entrega generada'}</button>
+          {jefe && <button className="btn-mini" type="button" onClick={() => { setSinPdf(v => !v); setVal(null); setArch(null); setConf(false); setMotivo(''); setFolio('') }}>{sinPdf ? 'Volver a adjuntar el PDF' : 'Registrar sin PDF (excepción)'}</button>}
         </div>
       )}
     </section>
@@ -691,7 +768,7 @@ function PanelFactura({ d, rol, toast, recargar }) {
   }
   return (
     <section className="ov-panel">
-      <h2 className="ov-h2">Por facturar</h2>
+      <h2 className="ov-h2">En espera de facturación</h2>
       <dl className="ov-datos">
         <div><dt>Entrega SAP</dt><dd>{d.entrega_folio}</dd></div>
         <div><dt>Registrada</dt><dd>{fechaHora(d.entrega_en)} ({d.entrega_por})</dd></div>

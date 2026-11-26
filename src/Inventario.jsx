@@ -12,12 +12,21 @@ import ConteoDetalle from './InvConteo'
 import { MapaSvg, Leyenda, ESTADO_TXT, fh } from './InvUI'
 
 const inv = api.inv
+const estadoDe = (i) => (i.t && i.t !== 'rack' ? null : (i.n > 0 ? 'con' : 'vacia'))
+const tituloDe = (i) => [i.c, i.b, i.z && 'Zona ' + i.z, i.n > 0 ? `${i.n} producto(s), ${nf(i.s)} pzas` : (!i.t || i.t === 'rack' ? 'Vacia' : '')].filter(Boolean).join(' - ')
 // ---------- MAPA con existencias ----------
 function Mapa({ toast }) {
   const [d, setD] = useState(null)
   const [sel, setSel] = useState(null)
   const [det, setDet] = useState(null)
+  const [prod, setProd] = useState('')
+  const [resalta, setResalta] = useState(null)
   useEffect(() => { inv.get('/mapa').then(setD).catch(e => toast(e.message, 'error')) }, [toast])
+  const buscaProd = async (e) => {
+    e.preventDefault()
+    if (prod.trim().length < 2) { setResalta(null); return }
+    try { const r = await inv.get('/listar?limite=5000&producto=' + encodeURIComponent(prod.trim())); setResalta(new Set(r.filas.map(x => x.codigo))) } catch (er) { toast(er.message, 'error') }
+  }
   const abre = async (i) => {
     setSel(i.c)
     try { setDet(await inv.get('/ubicacion/' + encodeURIComponent(i.c))) } catch { setDet({ codigo: i.c, productos: [], sinDato: true }) }
@@ -28,8 +37,13 @@ function Mapa({ toast }) {
     <div className="panel">
       <div className="panel-titulo">Mapa del almacen</div>
       <div className="sub-pag">{d.sync ? `Existencias de Odoo al ${fh(d.sync.fecha)}` : 'Aun no se han sincronizado existencias de Odoo.'}</div>
-      <Leyenda claves={['con', 'vacia']} />
-      <MapaSvg items={d.items} claseDe={clase} onClick={abre} sel={sel} />
+      <form className="inv-fila" onSubmit={buscaProd} style={{ marginTop: 10 }}>
+        <input className="inp" placeholder="Resaltar donde esta un producto (clave o descripcion)" value={prod} onChange={e => setProd(e.target.value)} />
+        <button className="btn-sec" type="submit">Resaltar</button>
+        {resalta && <button className="btn-sec" type="button" onClick={() => { setResalta(null); setProd('') }}>Quitar</button>}
+      </form>
+      {resalta && <div className="sub-pag">{resalta.size ? `${nf(resalta.size)} ubicacion(es) con ese producto.` : 'Ninguna ubicacion tiene ese producto.'}</div>}
+      <MapaSvg items={d.items} claseDe={clase} estadoDe={estadoDe} leyenda={['con', 'vacia']} onClick={abre} sel={sel} resaltar={resalta} tituloDe={tituloDe} />
       {det && (
         <Modal titulo={det.codigo} sub={[det.bodega, det.zona && 'Zona ' + det.zona].filter(Boolean).join(' - ')} onClose={() => { setDet(null); setSel(null) }}>
           {det.productos.length === 0 ? <div className="sub-pag">Sin existencias registradas en esta ubicacion.</div> : (

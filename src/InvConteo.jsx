@@ -13,6 +13,9 @@ function Barra({ pct }) {
   return <div className="ov-barra" role="img" aria-label={`Avance ${Math.round(p)}%`}><div className="ov-barra-pista"><div className="ov-barra-relleno" style={{ width: p + '%' }} /></div><span className="ov-barra-n">{Math.round(p)}%</span></div>
 }
 
+const claseAv = (i) => 'inv-e-' + i.e + (i.mia ? ' inv-ub--mia' : '')
+const estadoAv = (i) => (i.e === 'fuera' ? 'fuera' : i.e)
+const tituloAv = (i) => [i.c, i.b, i.z && 'Zona ' + i.z, ESTADO_TXT[i.e] || i.e, i.mia && 'asignada a ti'].filter(Boolean).join(' - ')
 // ---------- AVANCE: mapa coloreado por estado ----------
 function Avance({ id, toast }) {
   const [d, setD] = useState(null)
@@ -32,8 +35,7 @@ function Avance({ id, toast }) {
           <button className="btn-sec" onClick={cargar}>Actualizar</button>
         </div>
       </div>
-      <Leyenda cuenta={d.cuenta} claves={claves} />
-      <MapaSvg items={d.items} claseDe={i => 'inv-e-' + i.e + (i.mia ? ' inv-ub--mia' : '')} onClick={abre} />
+      <MapaSvg items={d.items} claseDe={claseAv} estadoDe={estadoAv} leyenda={claves} onClick={abre} tituloDe={tituloAv} />
       {det && (
         <Modal titulo={det.codigo} sub={ESTADO_TXT[det.estado === 'contada' ? 'contada' : det.estado] || det.estado} onClose={() => setDet(null)}>
           <div className="sub-pag">{[det.bodega, det.zona && 'Zona ' + det.zona, det.grupo, det.asignado_a && 'Asignada a ' + det.asignado_a, det.contada_por && 'Contada por ' + det.contada_por + ' ' + fh(det.fecha_conteo)].filter(Boolean).join(' - ')}</div>

@@ -532,7 +532,7 @@ function NuevaEntrega({ toast, irDetalle }) {
       toast('Cargando ' + ov.num_ov + ' desde Odoo...')
       const datos = await api.odooCargarEntrega(ov.picking_ids)
       const res = await api.crearEntrega({ ...datos, sistema, fuente: 'odoo' })
-      toast(datos.productos.length + ' productos importados', 'ok')
+      toast(datos.productos.length + ' productos importados' + (datos.avisos && datos.avisos.length ? '. Revisa: ' + datos.avisos.slice(0, 3).join(' | ') : ''), datos.avisos && datos.avisos.length ? 'error' : 'ok')
       irDetalle(res.id_entrega)
     } catch (e) { toast(e.message, 'error') }
   }
@@ -552,7 +552,7 @@ function NuevaEntrega({ toast, irDetalle }) {
     setSubiendo(true)
     try {
       const res = await api.subirPDF(archivo, sistema, '', forzar)
-      toast(res.total + ' productos extraidos del PDF', 'ok')
+      toast(res.total + ' productos (' + (res.total_piezas || 0) + ' piezas) extraidos del PDF' + (res.avisos && res.avisos.length ? '. Revisa: ' + res.avisos.slice(0, 3).join(' | ') : ''), res.avisos && res.avisos.length ? 'error' : 'ok')
       irDetalle(res.id_entrega)
     } catch (e) {
       if (e.status === 409 && !forzar) {

@@ -173,6 +173,8 @@ export const ovSurtidoTerminar = (id, motivo) => post(`/api/ov/${id}/surtido/ter
 export const ovPrepIniciar = (id) => post(`/api/ov/${id}/preparacion/iniciar`)
 export const ovCajaNueva = (id) => post(`/api/ov/${id}/preparacion/cajas`)
 export const ovCajaEscanear = (id, cid, codigo, cantidad = 1) => post(`/api/ov/${id}/preparacion/cajas/${cid}/escanear`, { codigo, cantidad })
+export const ovCajaAsignar = (id, cid, items, todo = false) => post(`/api/ov/${id}/preparacion/cajas/${cid}/asignar`, { items, todo })
+export const ovCajaVaciar = (id, cid) => post(`/api/ov/${id}/preparacion/cajas/${cid}/vaciar`)
 export const ovCajaQuitar = (id, cid, linea_id, cantidad = 1) => post(`/api/ov/${id}/preparacion/cajas/${cid}/quitar?linea_id=${linea_id}&cantidad=${cantidad}`)
 export const ovCajaCerrar = (id, cid, peso_kg) => post(`/api/ov/${id}/preparacion/cajas/${cid}/cerrar`, { peso_kg: peso_kg || null })
 export const ovCajaReabrir = (id, cid) => post(`/api/ov/${id}/preparacion/cajas/${cid}/reabrir`)
@@ -180,8 +182,8 @@ export const ovPrepTerminar = (id, motivo) => post(`/api/ov/${id}/preparacion/te
 export const ovEtiquetas = (id, cajaId) => req(`/api/ov/${id}/etiquetas${cajaId ? '?caja_id=' + cajaId : ''}`)
 export const ovMarcarImpresas = (id, caja_ids) => post(`/api/ov/${id}/impresion`, { caja_ids })
 export const ovEntregaValidar = (id, archivo) => { const fd = new FormData(); fd.append('archivo', archivo); return reqForm(`/api/ov/${id}/entrega/validar`, fd) }
-export const ovEntregaRegistrar = (id, { folio, archivo, confirmar }) => {
-  const fd = new FormData(); fd.append('folio', folio || ''); fd.append('confirmar_diferencias', confirmar ? 'true' : 'false')
+export const ovEntregaRegistrar = (id, { folio, archivo, confirmar, motivo }) => {
+  const fd = new FormData(); fd.append('folio', folio || ''); fd.append('confirmar_diferencias', confirmar ? 'true' : 'false'); fd.append('motivo', motivo || '')
   if (archivo) fd.append('archivo', archivo)
   return reqForm(`/api/ov/${id}/entrega`, fd)
 }
