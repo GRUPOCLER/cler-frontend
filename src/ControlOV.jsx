@@ -282,6 +282,7 @@ export function OVDetalle({ toast }) {
   const [d, setD] = useState(null)
   const [error, setError] = useState(null)
   const [modalCancelar, setModalCancelar] = useState(false)
+  const [modalLiga, setModalLiga] = useState(false)
 
   const cargar = useCallback(() => api.ovDetalle(id).then(x => { setD(x); setError(null); return x }).catch(e => { setError(e.message) }), [id])
   useEffect(() => { cargar() }, [cargar])
@@ -299,6 +300,7 @@ export function OVDetalle({ toast }) {
           <button className="btn-sec" onClick={() => navigate('/ov')}>Volver</button>
         </div>
         <div className="ov-cab-acc">
+          {d.estatus !== 'cancelada' && PUEDE_CARGAR(rol) && <button className="btn-sec" onClick={() => setModalLiga(true)}>Compartir seguimiento</button>}
           {abierta && ES_JEFE(rol) && <button className="btn-sec" onClick={() => setModalCancelar(true)}>Cancelar OV</button>}
         </div>
       </div>
@@ -343,6 +345,7 @@ export function OVDetalle({ toast }) {
       )}
 
       <PanelArchivos d={d} rol={rol} toast={toast} />
+      {modalLiga && <ModalLiga d={d} toast={toast} onClose={() => setModalLiga(false)} />}
 
       <section className="ov-panel">
         <h2 className="ov-h2">Historial y tiempos</h2>
@@ -367,6 +370,35 @@ export function OVDetalle({ toast }) {
       {modalCancelar && <ModalMotivo titulo="Cancelar OV" texto="La OV quedará cancelada. Escribe el motivo." onClose={() => setModalCancelar(false)}
         onOk={async (m) => { try { await api.ovCancelar(id, m); setModalCancelar(false); toast('OV cancelada', 'ok'); cargar() } catch (e) { toast(e.message, 'error') } }} />}
     </div>
+  )
+}
+
+function ModalLiga({ d, toast, onClose }) {
+  const [en, setEn] = useState(undefined)
+  const [env, setEnv] = useState(false)
+  const url = en ? window.location.origin + '/seguimiento/' + en.token : ''
+  useEffect(() => { api.ovEnlaceVer(d.id).then(r => setEn(r.enlace)).catch(e => { toast(e.message, 'error'); setEn(null) }) }, [d.id]) // eslint-disable-line
+  const crear = async (regen) => { setEnv(true); try { setEn((await api.ovEnlaceCrear(d.id, regen)).enlace) } catch (e) { toast(e.message, 'error') } finally { setEnv(false) } }
+  const revocar = async () => { setEnv(true); try { await api.ovEnlaceRevocar(d.id); setEn(null); toast('Liga desactivada', 'ok') } catch (e) { toast(e.message, 'error') } finally { setEnv(false) } }
+  const copiar = async () => { try { await navigator.clipboard.writeText(url); toast('Liga copiada', 'ok') } catch { toast('Selecciona la liga y cópiala', 'error') } }
+  return (
+    <Modal titulo="Seguimiento para el cliente" sub={'OV ' + d.num_ov} onClose={onClose}>
+      <p className="an-nota">Con esta liga, el cliente ve en qué etapa va su pedido, el avance de surtido y las partidas con sus cantidades. No ve precios, folios internos ni nombres del personal. No necesita usuario.</p>
+      {en === undefined && <div className="cargando">Cargando...</div>}
+      {en === null && <div className="ov-acc"><button className="btn-principal" disabled={env} onClick={() => crear(false)}>Crear liga</button></div>}
+      {en && (
+        <div className="ov-form">
+          <label className="an-campo">Liga para enviar <input className="inp" readOnly value={url} onFocus={e => e.target.select()} /></label>
+          <div className="ov-acc"><button className="btn-principal" onClick={copiar}>Copiar liga</button></div>
+          <div className="an-nota">Creada {fechaHora(en.creado_en)} por {en.creado_por}. {en.vistas ? `Vista ${en.vistas} vez/veces, la última ${fechaHora(en.ultima_vista)}.` : 'Aún no la han abierto.'}</div>
+          <div className="ov-acc">
+            <button className="btn-sec" disabled={env} onClick={() => crear(true)}>Generar liga nueva</button>
+            <button className="btn-sec" disabled={env} onClick={revocar}>Desactivar liga</button>
+          </div>
+          <div className="an-nota">Si generas una liga nueva o la desactivas, la anterior deja de funcionar.</div>
+        </div>
+      )}
+    </Modal>
   )
 }
 

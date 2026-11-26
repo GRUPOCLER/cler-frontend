@@ -466,3 +466,15 @@ export const inv = {
 }
 export const rolInv = () => rolEn('inventario')
 export const nivelInv = () => ({ admin: 3, gerente: 3, auditor: 2, operador: 1 }[rolEn('inventario')] || 0)
+
+// ── Seguimiento para el cliente (liga publica por OV) ──
+export const ovEnlaceVer = (id) => req(`/api/ov/${id}/enlace`)
+export const ovEnlaceCrear = (id, regenerar = false) => req(`/api/ov/${id}/enlace?regenerar=${regenerar}`, { method: 'POST' })
+export const ovEnlaceRevocar = (id) => req(`/api/ov/${id}/enlace`, { method: 'DELETE' })
+// Publico: sin token de sesion
+export async function seguimientoPublico(token) {
+  const res = await fetch(API_URL + '/api/seguimiento/' + encodeURIComponent(token))
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok) { const e = new Error(j.detail || 'No se pudo consultar el seguimiento.'); e.status = res.status; throw e }
+  return j
+}
